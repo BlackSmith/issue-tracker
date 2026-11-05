@@ -1,0 +1,39 @@
+# Development identities only. Application permissions are managed by the tracker.
+realm: issue-tracker
+client_id: issue-tracker
+host: "0.0.0.0"
+port: 5151
+base_url: "http://host.docker.internal:5152"
+insecure_cookies: true
+access_token_ttl: 300
+refresh_token_ttl: 1800
+code_ttl: 60
+
+users:
+  - username: admin
+    password: admin123
+    email: admin@example.test
+    name: Development Administrator
+    sub: "00000000-0000-0000-0000-000000000001"
+    enabled: true
+    autologin: false
+    realm_roles: []
+    client_roles: {}
+  - username: member
+    password: member123
+    email: member@example.test
+    name: Development Member
+    sub: "00000000-0000-0000-0000-000000000002"
+    enabled: true
+    autologin: false
+    realm_roles: []
+    client_roles: {}
+  - username: reader
+    password: reader123
+    email: reader@example.test
+    name: Development Reader
+    sub: "00000000-0000-0000-0000-000000000003"
+    enabled: true
+    autologin: false
+    realm_roles: []
+    client_roles: {}

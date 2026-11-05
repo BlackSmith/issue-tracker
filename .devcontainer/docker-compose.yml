@@ -1,0 +1,73 @@
+services:
+
+  backend:
+    image: mcr.microsoft.com/devcontainers/python:3.13
+    ports:
+      - "5374:5374"
+      - "5301:5300"
+    user: vscode
+    command: sleep infinity
+    volumes:
+      - ..:/workspace:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      DATABASE_URL: postgresql+psycopg://user:password@db:5432/db
+      APP_BASE_URL: http://host.docker.internal:5374
+      API_BASE_URL: http://host.docker.internal:5301
+      OIDC_ISSUER: http://host.docker.internal:5152/realms/issue-tracker
+      OIDC_CLIENT_ID: issue-tracker
+      OIDC_REDIRECT_URI: http://host.docker.internal:5301/api/v1/auth/oidc/callback
+    depends_on:
+      db:
+        condition: service_healthy
+      keycloak-mockup:
+        condition: service_healthy
+
+  db:
+    image: postgres:18-trixie
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d db"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    environment:
+      # POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: db
+    volumes:
+     - db-data:/var/lib/postgresql/18/docker
+    # ports:
+    #   - 5432:5432
+
+  adminer:
+    image: adminer
+    restart: always
+
+  keycloak-mockup:
+    # The compatibility shim targets upstream v0.1.0 internals.
+    image: ghcr.io/calcite/keycloak-mockup@sha256:1f80ba1ca5b6d513f07544b347d6fedd2cca0c0ef42e88ad21d8c47f4061e8fe
+    ports:
+      - "5152:5151"
+    volumes:
+      - ./oidc-mock.yaml:/config.yaml:ro
+      - ./oidc_mock.py:/oidc_mock.py:ro
+    command: ["python", "/oidc_mock.py", "--config", "/config.yaml"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5151/realms/issue-tracker/.well-known/openid-configuration', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+networks:
+  default:
+
+volumes:
+  db-data:

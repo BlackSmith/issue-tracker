@@ -1,0 +1,44 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/python
+{
+	"name": "Issue Tracker",
+	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+	"service": "backend",
+	"workspaceFolder": "/workspace",
+	"remoteUser": "vscode",
+	"remoteEnv": {
+		"PATH": "/home/vscode/.opencode/bin:${containerEnv:PATH}"
+	},
+	"dockerComposeFile": [
+		"docker-compose.yml",
+		"docker-compose.local.yml"
+	],
+	"features": {
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "24"
+		},
+		"ghcr.io/devcontainers/features/git:1": {
+			"moby": "false"
+		},
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+			"moby": "false"
+		}
+	},
+	"containerEnv": {
+	  "HOST_WORKSPACE": "${localWorkspaceFolder}"
+	},
+	"postCreateCommand": "bash .devcontainer/post_script.sh",
+
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"Vue.volar",
+				"ms-python.python"
+			],
+			"settings": {
+				"python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python"
+			}
+		}
+	},
+	"shutdownAction": "stopCompose"
+}

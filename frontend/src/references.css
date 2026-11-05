@@ -1,0 +1,16 @@
+.reference-node { display: inline; }
+.reference-chip {
+  display: inline-flex; align-items: center; gap: 5px; vertical-align: baseline;
+  max-width: 100%; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--accent-border);
+  background: var(--accent-soft); color: var(--accent); font-size: 12px; line-height: 1.6;
+  font-weight: 500; text-decoration: none; overflow: hidden;
+}
+a.reference-chip:hover { text-decoration: none; border-color: var(--accent); }
+.reference-number { white-space: nowrap; flex-shrink: 0; font-size: 10px; opacity: .85; }
+.reference-title { min-width: 0; max-width: 42ch; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+.reference-status { font-size: 9px; padding: 0 5px; border-radius: 3px; white-space: nowrap; background: #ffffffaa; color: #496853; flex-shrink: 0; }
+.reference-status[data-status="In progress"] { color: #916520; background: #fff3de; }
+.reference-status[data-status="Done"] { color: #326d49; background: #dbf0e2; }
+.reference-status[data-status="Canceled"] { color: #73747b; background: #ebedf0; }
+.reference-unavailable { color: var(--muted); background: var(--subtle); border-color: var(--border); font-size: 11px; }
+.reference-user { white-space: normal; overflow-wrap: anywhere; }
