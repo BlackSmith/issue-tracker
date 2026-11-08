@@ -4,19 +4,21 @@ import App from './App.vue'
 import Workspace from './Workspace.vue'
 import Settings from './Settings.vue'
 import UserProfile from './UserProfile.vue'
-import Bots from './Bots.vue'
-import OrganizationSettings from './OrganizationSettings.vue'
+import ApplicationSettings from './ApplicationSettings.vue'
+import { installPrimeVue } from './primevue'
 import './style.css'
 import './theme.css'
 import './references.css'
+import './primevue.css'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: Workspace },
     { path: '/settings', component: Settings },
-    { path: '/admin/bots', component: Bots },
-    { path: '/admin/organization', component: OrganizationSettings },
+    { path: '/admin/settings', component: ApplicationSettings },
+    { path: '/admin/bots', redirect: to => ({ path: '/admin/settings', query: { ...to.query, tab: 'bots' }, hash: to.hash }) },
+    { path: '/admin/organization', redirect: to => ({ path: '/admin/settings', query: to.query, hash: to.hash }) },
     { path: '/users/:userId([a-fA-F0-9-]{36})', component: UserProfile },
     { path: '/projects/:projectId', component: Workspace },
     { path: '/items/:itemId', component: Workspace },
@@ -27,4 +29,4 @@ const router = createRouter({
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
-createApp(App).use(router).mount('#app')
+createApp(App).use(installPrimeVue).use(router).mount('#app')

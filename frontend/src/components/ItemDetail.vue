@@ -23,7 +23,7 @@ const error = ref(''), busy = ref(false), editingContent = ref(false), comment =
 const checklistBusy = ref(false)
 const commentUploading = ref(false)
 const descriptionUploading = ref(false), contentDraft = ref({ title: '', description: '' })
-const titleInput = ref<HTMLInputElement | null>(null)
+const titleInput = ref<{ $el: HTMLInputElement } | null>(null)
 const copyStatus = ref('')
 const headerReference = computed(() => item.value?.reference.replace(/-(\d+)$/, '#$1'))
 async function copyLink() {
@@ -90,7 +90,7 @@ async function editContent() {
   contentDraft.value = { title: item.value.title, description: item.value.description }
   editingContent.value = true; error.value = ''
   await nextTick()
-  titleInput.value?.focus()
+  titleInput.value?.$el.focus()
 }
 function cancelContent() {
   if (busy.value || descriptionUploading.value) return
@@ -140,9 +140,9 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
 <template>
   <div v-if="!standalone" class="panel-shade" @click="emit('close')"></div>
   <section class="detail-panel" :class="{ standalone }" :role="standalone ? undefined : 'dialog'" aria-label="Work item detail" @keydown.esc="emit('close')">
-    <header class="detail-top"><div class="detail-reference"><RouterLink v-if="item" :to="item.web_url" title="Open standalone page">{{ headerReference }}</RouterLink><span v-else>Work item</span><button v-if="item" class="quiet copy-ticket-link" aria-label="Copy ticket link" :title="copyStatus || 'Copy ticket link'" @click="copyLink"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path v-if="copyStatus === 'Link copied'" d="m5 12 4 4L19 6" /><template v-else><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4" /></template></svg></button><span class="sr-only" role="status">{{ copyStatus }}</span></div><div><button v-if="item && canWrite && !editingContent" class="quiet detail-edit" :disabled="busy || checklistBusy" aria-label="Edit ticket" @click="editContent">Edit</button>
-    <button v-if="!standalone && item" type="button" class="quiet detail-fullscreen" aria-label="Open fullscreen" title="Open fullscreen" @click="openFullscreen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 10l7-7m-6 0h6v6M10 14l-7 7m0-6v6h6" /></svg></button>
-    <button class="quiet" @click="emit('close')" :aria-label="standalone ? 'Back to project' : 'Close detail'">{{ standalone ? '← Back' : '×' }}</button></div></header>
+    <header class="detail-top"><div class="detail-reference"><RouterLink v-if="item" :to="item.web_url" title="Open standalone page">{{ headerReference }}</RouterLink><span v-else>Work item</span><PButton v-if="item" class="quiet copy-ticket-link" aria-label="Copy ticket link" :title="copyStatus || 'Copy ticket link'" @click="copyLink"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path v-if="copyStatus === 'Link copied'" d="m5 12 4 4L19 6" /><template v-else><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4" /></template></svg></PButton><span class="sr-only" role="status">{{ copyStatus }}</span></div><div><PButton v-if="item && canWrite && !editingContent" class="quiet detail-edit" :disabled="busy || checklistBusy" aria-label="Edit ticket" @click="editContent">Edit</PButton>
+    <PButton v-if="!standalone && item" type="button" class="quiet detail-fullscreen" aria-label="Open fullscreen" title="Open fullscreen" @click="openFullscreen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 10l7-7m-6 0h6v6M10 14l-7 7m0-6v6h6" /></svg></PButton>
+    <PButton class="quiet" @click="emit('close')" :aria-label="standalone ? 'Back to project' : 'Close detail'">{{ standalone ? '← Back' : '×' }}</PButton></div></header>
     <div v-if="error" class="error banner" role="alert">{{ error }}</div>
     <div v-if="!item" class="empty-state">{{ error ? 'Unable to load work item.' : 'Loading work item…' }}</div>
     <div v-else class="detail-body">
@@ -150,9 +150,9 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
       <div class="detail-layout">
         <div class="detail-main">
       <form v-if="editingContent" class="edit-form" aria-label="Edit ticket" @submit.prevent="saveContent" @keydown.esc.stop.prevent="cancelContent">
-        <label>Title<input ref="titleInput" v-model="contentDraft.title" required maxlength="250" :disabled="busy" /></label>
+        <label>Title<InputText ref="titleInput" v-model="contentDraft.title" required maxlength="250" :disabled="busy" /></label>
         <div class="editor-field"><span class="editor-field-label">Description</span><RichTextEditor v-model="contentDraft.description" label="Description" :item-id="itemId" :project-id="item.project_id" :disabled="busy" @uploading="descriptionUploading = $event" @uploaded="refreshAttachments" /></div>
-        <footer><button type="button" :disabled="busy || descriptionUploading" @click="cancelContent">Cancel</button><button class="primary" :disabled="busy || checklistBusy || descriptionUploading">Save changes</button></footer>
+        <footer><PButton type="button" severity="secondary" outlined :disabled="busy || descriptionUploading" @click="cancelContent">Cancel</PButton><PButton type="submit" :disabled="busy || checklistBusy || descriptionUploading">Save changes</PButton></footer>
       </form>
       <template v-else><Markdown v-if="item.description" :text="item.description" :project-id="item.project_id" :interactive="canWrite" :busy="busy || checklistBusy" @toggle="(index, checked) => toggleChecklist(index, checked)" /><p v-else class="muted">No description yet.</p></template>
       <p v-if="checklistBusy" class="hint" role="status">Saving checklist…</p>
@@ -163,7 +163,7 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
         <form v-if="canWrite" class="comment-form rich-comment-form" @submit.prevent="addComment">
           <RichTextEditor v-model="comment" label="Comment" placeholder="Leave a comment…" :item-id="itemId" :project-id="item.project_id" :disabled="busy"
             @uploading="commentUploading = $event" @uploaded="refreshAttachments" />
-          <footer><button class="primary" :disabled="busy || commentUploading || checklistBusy || !comment.trim()">{{ busy ? 'Posting…' : 'Add comment' }}</button></footer>
+          <footer><PButton type="submit" :loading="busy" :disabled="busy || commentUploading || checklistBusy || !comment.trim()">Add comment</PButton></footer>
         </form>
         <p v-else class="hint">You have read-only access to this project.</p>
       </section>

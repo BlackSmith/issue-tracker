@@ -15,6 +15,7 @@ The first development increment is implemented: FastAPI/Vue skeleton, PostgreSQL
 
 - Backend: FastAPI, SQLAlchemy 2, Alembic, and PostgreSQL. Do not use Django.
 - Frontend: Vue 3, TypeScript, and Vite.
+- Use PrimeVue 4 as the primary UI component library. Shared registration and the Aura-based theme live in `frontend/src/primevue.ts`; retain account-scoped appearance variables and the `legacy`, `primevue`, `app` CSS layer order. Use explicit submit types on PrimeVue form buttons.
 - Work item descriptions and comments use the shared Tiptap WYSIWYG editor. Keep Markdown as the database/API format for compatibility; users must not need Markdown syntax to format content. Preserve per-editor Marked parser isolation (see `docs/agent-memory.md`).
 - Support `@` user mentions, `#` ticket suggestions, and pasted internal ticket URLs in the shared editor. Persist stable reference IDs with neutral Markdown labels and resolve current names/title/status under the viewer's permissions; never embed protected ticket titles in a public ticket's stored reference.
 - API: versioned REST endpoints under `/api/v1`, with OpenAPI documentation. The frontend uses the same API exposed to integrations.
@@ -31,6 +32,7 @@ The first development increment is implemented: FastAPI/Vue skeleton, PostgreSQL
 - Identify OIDC identities by the verified `issuer` and `subject`, not by email address.
 - Maintain stable internal user IDs and separate external identity records. A user may have multiple external identities.
 - Every authenticated user can edit their own display name, contact email, avatar, and appearance. Profile email is not an authentication identifier. Preserve local profile changes across later OIDC sign-ins. Appearance is stored per account; default to a green accent and white background and reset to defaults on logout.
+- Application Settings (`/admin/settings`) is available only to organization/application administrators, with Organization, Users, and Bots tabs. The Users overview includes inactive/pending human accounts, application Admin/User designation, and last successful OIDC sign-in; API/token requests do not count as sign-ins. Project Admin does not grant application settings access.
 - Never automatically merge accounts by matching email. Linking an identity requires an authenticated user and verification of the additional identity.
 - Handle login in the backend and use server-side sessions with secure, HttpOnly cookies. Use state, nonce, and PKCE for the applicable authorization flow.
 - Manage organization roles and project permissions in the tracker.
@@ -43,6 +45,7 @@ The first development increment is implemented: FastAPI/Vue skeleton, PostgreSQL
 ## Initial Functional Scope
 
 - Projects with organization-visible or private access and administrator, member, and reader roles.
+- Project Admin (API role `administrator`) manages project settings, memberships, and local label definitions. Project Member can contribute to work items but cannot configure the project. Organization administrators retain full access; project administration cannot elevate organization readers or bots. Use API-provided `can_manage` for the settings UI and enforce the same permission in backend endpoints.
 - Work items with project-scoped identifiers such as `APP-123`, title, visually edited description (stored as Markdown), type, status, priority, assignee, due date, labels, and milestone.
 - Labels are explicit administrator-managed definitions with name, color, and description at organization or project scope. Every project inherits all organization labels; ticket creation and editing must select existing definitions. Preserve assignments when renaming and reject deletion of assigned labels. Names are case-sensitive and unambiguous within each inherited/local catalog.
 - Initial statuses: `Open`, `In progress`, `Done`, and `Canceled`. Per-project custom workflows are outside the initial scope.

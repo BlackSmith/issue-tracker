@@ -24,6 +24,7 @@ class User(Base):
     role: Mapped[str | None] = mapped_column(String(20))
     active: Mapped[bool] = mapped_column(default=True)
     is_bot: Mapped[bool] = mapped_column(default=False, server_default=false())
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     avatar: Mapped[bytes | None] = mapped_column(LargeBinary)
     theme_accent: Mapped[str] = mapped_column(String(20), default="green", server_default="green")
     theme_background: Mapped[str] = mapped_column(String(20), default="white", server_default="white")

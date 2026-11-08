@@ -8,6 +8,8 @@ import { statuses } from './types'
 import ItemDetail from './components/ItemDetail.vue'
 import ProjectSettings from './components/ProjectSettings.vue'
 import NewItem from './components/NewItem.vue'
+import WorkspaceSidebar from './components/WorkspaceSidebar.vue'
+import { defaultStatuses, isDefaultStatusFilter, readFilterValues, statusFilterQuery } from './itemFilters'
 
 const route = useRoute(), router = useRouter()
 const projects = ref<Project[]>([]), items = ref<WorkItem[]>([]), total = ref(0)
@@ -26,7 +28,9 @@ const itemId = computed(() => resolvedPath.value === route.path ? resolvedItem.v
 const ticketRoute = computed(() => !!route.params.itemNumber || !!route.params.itemId)
 const creatingItem = computed(() => route.name === 'new-item')
 const standalone = computed(() => (ticketRoute.value || creatingItem.value) && route.query.view !== 'panel')
-const q = ref(''), status = ref(''), label = ref(''), sort = ref('updated')
+const q = ref(''), status = ref<string[]>([...defaultStatuses]), label = ref<string[]>([]), sort = ref('updated')
+const hasFilters = computed(() => !!q.value || !isDefaultStatusFilter(status.value) || label.value.length > 0)
+const labelOptions = computed(() => [...new Set([...labels.value.map(tag => tag.name), ...label.value])])
 const page = computed(() => Number(route.query.page) || 1)
 let sequence = 0
 
@@ -67,15 +71,15 @@ async function load() {
       await router.replace({ path: `/${projects.value[0]!.slug}/`, query: route.query, hash: route.hash })
       return
     }
-    q.value = String(route.query.q || ''); status.value = String(route.query.status || '')
-    label.value = String(route.query.label || ''); sort.value = String(route.query.sort || 'updated')
+    q.value = String(route.query.q || ''); status.value = readFilterValues(route.query.status, defaultStatuses)
+    label.value = readFilterValues(route.query.label); sort.value = String(route.query.sort || 'updated')
     if (projectId.value && !standalone.value) {
       const definitions = await api<LabelDefinition[]>(`/projects/${projectId.value}/labels`)
       if (current !== sequence) return
       labels.value = definitions
       const params = new URLSearchParams({ q: q.value, sort: sort.value, page: String(page.value) })
-      if (status.value) params.set('status', status.value)
-      if (label.value) params.set('label', label.value)
+      status.value.forEach(value => params.append('status', value))
+      label.value.forEach(value => params.append('label', value))
       const result = await api<{ items: WorkItem[]; total: number }>(`/projects/${projectId.value}/items?${params}`)
       if (current !== sequence) return
       items.value = result.items; total.value = result.total
@@ -84,13 +88,18 @@ async function load() {
   finally { if (current === sequence) loading.value = false }
 }
 onMounted(load)
-watch(() => route.fullPath, load)
+watch(() => route.fullPath, () => {
+  showProject.value = false
+  showSettings.value = false
+  load()
+})
 
 function filter(reset = true) {
-  const query: Record<string, string> = {}
+  const query: Record<string, string | string[]> = {}
   if (q.value) query.q = q.value
-  if (status.value) query.status = status.value
-  if (label.value) query.label = label.value
+  const selectedStatuses = statusFilterQuery(status.value)
+  if (selectedStatuses !== undefined) query.status = selectedStatuses
+  if (label.value.length) query.label = label.value
   if (sort.value !== 'updated') query.sort = sort.value
   if (!reset && page.value > 1) query.page = String(page.value)
   router.push({ path: projectPath.value, query })
@@ -125,25 +134,29 @@ function itemCreated(item: WorkItem) {
 
 <template>
   <div class="workspace" :class="{ 'with-detail-panel': (itemId || (creatingItem && project)) && !standalone }">
-    <aside class="sidebar">
-      <div class="sidebar-heading">WORKSPACE</div><RouterLink to="/" class="workspace-link">▦ <span>Organization</span></RouterLink>
-      <div class="sidebar-heading project-heading">PROJECTS <button v-if="auth.user?.role === 'administrator'" class="quiet" @click="showProject = true" aria-label="Create project">+</button></div>
-      <nav aria-label="Projects"><RouterLink v-for="p in projects" :key="p.id" :to="`/${p.slug}/`" class="project-link" :class="{ active: p.id === projectId }"><span class="project-icon">{{ p.key.slice(0, 2) }}</span><span>{{ p.name }}<small>{{ p.visibility === 'private' ? 'Private project' : p.key }}</small></span></RouterLink></nav>
-      <p v-if="!projects.length && !loading" class="sidebar-empty">Your projects will appear here.</p>
-      <div class="sidebar-footer"><span class="green-dot"></span> Connected to your workspace<a href="/api/v1/docs" target="_blank" rel="noopener">API documentation ↗</a></div>
-    </aside>
+    <WorkspaceSidebar :projects="projects" :project-id="projectId" :loading="loading" :can-create-project="auth.user?.role === 'administrator'" @create-project="showProject = true" />
     <main class="main-content" :class="{ 'standalone-content': standalone }">
-      <div v-if="error" class="error banner" role="alert">{{ error }}<button class="quiet" @click="error = ''" aria-label="Dismiss error">×</button></div>
+      <PMessage v-if="error" severity="error" closable @close="error = ''">{{ error }}</PMessage>
       <template v-if="!standalone">
         <div class="breadcrumbs">Organization <span>/</span> {{ project?.name || 'Projects' }}</div>
-        <header class="page-heading"><div><span class="eyebrow">{{ project?.key || 'YOUR WORKSPACE' }}</span><h1>Work items <span v-if="project" class="count">{{ total }}</span></h1><p>{{ project?.description || 'Track ideas, move work forward, and keep everyone in the loop.' }}</p></div><div class="heading-actions"><button v-if="project && auth.user?.role === 'administrator'" @click="showSettings = true">⚙ Settings</button><button v-if="project?.can_write" class="primary" @click="newItem">＋ New work item</button><button v-else-if="!projects.length && auth.user?.role === 'administrator'" class="primary" @click="showProject = true">＋ Create project</button></div></header>
+        <header class="page-heading"><div><span class="eyebrow">{{ project?.key || 'YOUR WORKSPACE' }}</span><h1>Work items <span v-if="project" class="count">{{ total }}</span></h1><p>{{ project?.description || 'Track ideas, move work forward, and keep everyone in the loop.' }}</p></div><div class="heading-actions"><PButton v-if="project?.can_manage" severity="secondary" outlined @click="showSettings = true">⚙ Settings</PButton><PButton v-if="project?.can_write" @click="newItem">＋ New work item</PButton><PButton v-else-if="!projects.length && auth.user?.role === 'administrator'" @click="showProject = true">＋ Create project</PButton></div></header>
         <template v-if="project">
-          <form class="filters" @submit.prevent="filter()"><label class="search-field"><span>⌕</span><input v-model="q" aria-label="Search work items" placeholder="Search work items…" type="search" /><kbd>↵</kbd></label><select v-model="status" @change="filter()" aria-label="Filter by status"><option value="">All statuses</option><option v-for="s in statuses" :key="s">{{ s }}</option></select><select v-model="label" class="label-filter" aria-label="Filter by label" @change="filter()"><option value="">All labels</option><option v-if="label && !labels.some(tag => tag.name === label)" :value="label">{{ label }}</option><option v-for="tag in labels" :key="tag.id" :value="tag.name">{{ tag.name }}</option></select><select v-model="sort" @change="filter()" aria-label="Sort work items"><option value="updated">Last updated</option><option value="created">Newest first</option><option value="title">Title A–Z</option></select><button type="submit" class="quiet">Apply</button></form>
-          <div class="list-caption"><span>{{ total }} work {{ total === 1 ? 'item' : 'items' }}</span><button v-if="q || status || label" class="quiet" @click="q = ''; status = ''; label = ''; filter()">Clear filters</button></div>
+          <form class="filters" @submit.prevent="filter()">
+            <label class="search-field"><span>⌕</span><InputText v-model="q" aria-label="Search work items" placeholder="Search work items…" type="search" /><kbd>↵</kbd></label>
+            <MultiSelect :model-value="status" :options="statuses" placeholder="All statuses" :max-selected-labels="2" selected-items-label="{0} statuses selected" show-clear @update:model-value="status = $event || []" @change="filter()" aria-label="Filter by status">
+              <template #option="{ option }"><span class="filter-option"><span class="status-icon" :class="option.toLowerCase().replace(' ', '-')" aria-hidden="true">{{ option === 'Done' ? '✓' : option === 'Canceled' ? '−' : '◉' }}</span>{{ option }}</span></template>
+            </MultiSelect>
+            <MultiSelect :model-value="label" class="label-filter" :options="labelOptions" placeholder="All labels" :max-selected-labels="1" selected-items-label="{0} labels selected" filter show-clear @update:model-value="label = $event || []" @change="filter()" aria-label="Filter by label">
+              <template #option="{ option }"><span class="filter-option"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 3h7l11 11-7 7L3 10Z" /><circle cx="7.5" cy="7.5" r="1" /></svg><LabelBadge :name="option" :definition="labels.find(tag => tag.name === option)" /></span></template>
+            </MultiSelect>
+            <PSelect v-model="sort" :options="[{ label: 'Last updated', value: 'updated' }, { label: 'Newest first', value: 'created' }, { label: 'Title A–Z', value: 'title' }]" option-label="label" option-value="value" @change="filter()" aria-label="Sort work items" />
+            <PButton type="submit" class="quiet">Apply</PButton>
+          </form>
+          <div class="list-caption"><span>{{ total }} work {{ total === 1 ? 'item' : 'items' }}</span><PButton v-if="hasFilters" class="quiet" @click="q = ''; status = [...defaultStatuses]; label = []; filter()">Reset filters</PButton></div>
           <div v-if="loading" class="empty-state">Loading work items…</div>
           <section v-else-if="items.length" class="item-list" aria-label="Work items"><RouterLink v-for="item in items" :key="item.id" class="item-row" :to="{ path: item.web_url, query: { ...route.query, view: 'panel' } }"><span class="status-icon" :class="item.status.toLowerCase().replace(' ', '-')">{{ item.status === 'Done' ? '✓' : item.status === 'Canceled' ? '−' : '◉' }}</span><span class="item-info"><strong>{{ item.title }}</strong><span class="item-meta">{{ item.reference }} <span>·</span> {{ item.type }} <span>·</span> {{ item.status }} <span v-if="item.due_date">· Due {{ item.due_date }}</span></span><span v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></span></span><span class="priority" :class="item.priority.toLowerCase()">{{ item.priority }}</span><span class="row-arrow">↗</span></RouterLink></section>
-          <div v-else class="empty-state"><span class="empty-icon">▤</span><h2>{{ q || status || label ? 'No matching work items' : 'A clear space for your next idea' }}</h2><p>{{ q || status || label ? 'Try adjusting your filters or search terms.' : 'Create your first work item to start moving things forward.' }}</p><button v-if="project.can_write && !q && !status && !label" class="primary" @click="newItem">Create work item</button></div>
-          <footer v-if="total > 25" class="pagination"><button :disabled="page <= 1" @click="router.push({ query: { ...route.query, page: page - 1 } })">← Previous</button><span>Page {{ page }} of {{ Math.ceil(total / 25) }}</span><button :disabled="page * 25 >= total" @click="router.push({ query: { ...route.query, page: page + 1 } })">Next →</button></footer>
+          <div v-else class="empty-state"><span class="empty-icon">▤</span><h2>{{ hasFilters ? 'No matching work items' : 'No active work items' }}</h2><p>{{ hasFilters ? 'Try adjusting your filters or search terms.' : 'Done and canceled work items are hidden by default. Change the status filter to see them, or create a new work item.' }}</p><PButton v-if="project.can_write && !hasFilters" @click="newItem">Create work item</PButton></div>
+          <Paginator v-if="total > 25" :first="(page - 1) * 25" :rows="25" :total-records="total" @page="router.push({ query: { ...route.query, page: $event.page + 1 } })" />
         </template>
         <div v-else-if="!loading" class="empty-state"><span class="empty-icon">▦</span><h2>{{ hasProjectRoute ? 'Project not found' : 'Welcome to your workspace' }}</h2><p>{{ hasProjectRoute ? 'This project does not exist or you do not have access to it.' : 'A project brings your team’s work together. Create one to get started.' }}</p></div>
       </template>
@@ -154,18 +167,15 @@ function itemCreated(item: WorkItem) {
     </main>
   </div>
 
-  <div v-if="showProject" class="modal-backdrop" @click.self="showProject = false">
-    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="project-heading">
+  <PDialog v-model:visible="showProject" modal header="Create a project" :closable="!busy" :dismissable-mask="!busy">
       <form @submit.prevent="createProject">
-        <header><h2 id="project-heading">Create a project</h2><button type="button" class="quiet" @click="showProject = false" aria-label="Close">×</button></header>
-        <label>Project name<input v-model="projectForm.name" required maxlength="150" autofocus placeholder="e.g. Product development" /></label>
-        <label>Project key<input v-model="projectForm.key" required pattern="[A-Z][A-Z0-9]{1,9}" maxlength="10" placeholder="APP" @input="projectForm.key = projectForm.key.toUpperCase()" /><small>2–10 uppercase letters or numbers, starting with a letter.</small></label>
-        <label>Project URL slug<input v-model="projectForm.slug" maxlength="100" pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="Automatically generated from the name" /><small>Optional. Used in ticket URLs such as /product-development/123. Lowercase letters, numbers, and hyphens.</small></label>
-        <label>Description<textarea v-model="projectForm.description" rows="3" /></label>
-        <label>Visibility<select v-model="projectForm.visibility"><option value="organization">Organization — visible to all members</option><option value="private">Private — project members only</option></select></label>
-        <p v-if="error" class="error">{{ error }}</p><footer><button type="button" @click="showProject = false">Cancel</button><button class="primary" :disabled="busy">{{ busy ? 'Creating…' : 'Create project' }}</button></footer>
+        <label>Project name<InputText v-model="projectForm.name" required maxlength="150" autofocus placeholder="e.g. Product development" :disabled="busy" /></label>
+        <label>Project key<InputText v-model="projectForm.key" required pattern="[A-Z][A-Z0-9]{1,9}" maxlength="10" placeholder="APP" :disabled="busy" @update:model-value="projectForm.key = projectForm.key.toUpperCase()" /><small>2–10 uppercase letters or numbers, starting with a letter.</small></label>
+        <label>Project URL slug<InputText v-model="projectForm.slug" maxlength="100" pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="Automatically generated from the name" :disabled="busy" /><small>Optional. Used in ticket URLs such as /product-development/123. Lowercase letters, numbers, and hyphens.</small></label>
+        <label>Description<PTextarea v-model="projectForm.description" rows="3" :disabled="busy" /></label>
+        <label>Visibility<SelectButton v-model="projectForm.visibility" :options="[{ label: 'Organization', value: 'organization' }, { label: 'Private', value: 'private' }]" option-label="label" option-value="value" :allow-empty="false" aria-label="Visibility" :disabled="busy" /><small>Organization: visible to all organization members. Private: project members only.</small></label>
+        <PMessage v-if="error" severity="error">{{ error }}</PMessage><footer><PButton type="button" severity="secondary" outlined :disabled="busy" @click="showProject = false">Cancel</PButton><PButton type="submit" :loading="busy" :disabled="busy">Create project</PButton></footer>
       </form>
-    </section>
-  </div>
-  <ProjectSettings v-if="showSettings && project" :key="project.id" :project="project" @close="showSettings = false" @labels-updated="load" @updated="updated => projects = projects.map(p => p.id === updated.id ? updated : p)" />
+  </PDialog>
+  <ProjectSettings v-if="showSettings && project?.can_manage" :key="project.id" :project="project" @close="showSettings = false" @labels-updated="load" @permissions-updated="load" @updated="updated => projects = projects.map(p => p.id === updated.id ? updated : p)" />
 </template>

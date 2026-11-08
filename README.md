@@ -1,17 +1,24 @@
 # Issue Tracker
 
 A standalone, organization-scoped issue tracker inspired by GitLab Work Items.
-Built with FastAPI, PostgreSQL, and Vue 3. The interface and API use English.
+Built with FastAPI, PostgreSQL, Vue 3, and PrimeVue 4. The interface and API use English.
 
 ## Current increment
 
+- PrimeVue controls for buttons, text fields, selects, searchable label multi-selects,
+  project dialogs, messages, pagination, and upload progress. The Aura-based theme
+  follows the account's accent color; descriptions and comments retain the shared Tiptap editor.
 - Generic OIDC login through Authlib with server-side sessions, session rotation,
   CSRF protection, state, nonce, and S256 PKCE.
 - Stable internal accounts and separate issuer/subject identities. Matching email
   addresses never merge accounts or confer organization membership.
 - Organization administrator, member, and reader roles; organization-visible and
-  private projects; administrator project settings for name, description, visibility,
-  and membership management, available from the work item list.
+  private projects. Project roles are Admin, Member, and Reader: Admin manages
+  project settings, memberships, and project labels; Member contributes to work
+  items without configuring the project; Reader has read-only access. Organization
+  administrators retain full access. Bots and organization readers cannot become
+  project administrators. A newly created project automatically includes its creator
+  as an explicit Admin member.
 - Personal settings for display name, contact email, profile picture, interface
   accent color, and application background. Green is the default accent.
 - Project-scoped work item numbers, visually edited descriptions, types, fixed statuses,
@@ -21,7 +28,10 @@ Built with FastAPI, PostgreSQL, and Vue 3. The interface and API use English.
 - Explicit organization and project label definitions with names, colors, and
   descriptions; projects automatically inherit all organization labels. Ticket
   creation, editing, and filtering use existing definitions.
-- Search, status/label filtering, sorting, pagination, and shareable filter URLs.
+- Search, multi-status/multi-label filtering, sorting, pagination, and shareable
+  filter URLs. Project lists default to Open and In progress, hiding Done and Canceled.
+  Selected statuses match any selected status; selected labels match any selected label.
+  Status and label filters are combined. Reset filters restores the default view.
 - Side-panel and standalone work item creation and detail, with draft-preserving
   switching between creation presentations and list filters preserved on return.
 - Readable project URLs such as `/product-development/` and ticket URLs using
@@ -116,9 +126,25 @@ use the same verified issuer and subject to grant membership to that account.
 Project access can then be set with the **Members** button by an administrator.
 A global reader cannot gain write access through a project role.
 
+### Application settings and users
+
+Application administrators open **Settings** directly in the left sidebar. The
+application settings page at `/admin/settings` has **Organization**, **Users**, and
+**Bots** tabs. Users and Bots are directly linkable with `?tab=users` and `?tab=bots`.
+Existing `/admin/organization` and `/admin/bots` links redirect to the corresponding
+tab. Project Admin does not grant access to application settings.
+
+The Users tab lists all human accounts, including inactive accounts and accounts
+awaiting membership, with name, email, application role (**Admin** or **User**),
+last successful browser sign-in, and account status. It supports search, sorting,
+and pagination. Bots remain in their dedicated tab. Last sign-in is recorded on
+successful OIDC authentication, not API requests or token usage. Older accounts
+show **Not recorded** until their next sign-in; no historical times are inferred.
+The administrator-only integration endpoint is `GET /api/v1/admin/users`.
+
 ### Label management
 
-Administrators manage shared labels in **Organization settings → Labels** and
+Administrators manage shared labels in **Settings → Organization → Labels** and
 project-specific labels in a project's **Settings → Labels**. Each definition has
 a name (up to 50 characters), a color, and an optional description (up to 2,000
 characters). Inherited organization labels are read-only in project settings and

@@ -4,10 +4,13 @@ import logging
 import mimetypes
 import secrets
 from contextlib import asynccontextmanager, suppress
+from datetime import timezone
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
+from pydantic import Field
 from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -53,7 +56,12 @@ app.include_router(bots_router)
 api = "/api/v1"
 
 
-def project_access(db: Session, project_id: str, user: User, write=False) -> Project:
+def can_manage_project(user, member):
+    return not user.is_bot and (user.role == "administrator" or (
+        user.role == "member" and member is not None and member.role == "administrator"))
+
+
+def project_access(db: Session, project_id: str, user: User, write=False, manage=False) -> Project:
     project = db.get(Project, project_id)
     member = db.get(ProjectMember, (project_id, user.id))
     if user.is_bot and not member:
@@ -63,6 +71,8 @@ def project_access(db: Session, project_id: str, user: User, write=False) -> Pro
     effective = member.role if member else user.role
     if write and (user.role != "administrator" or user.is_bot) and (user.role == "reader" or effective == "reader"):
         raise HTTPException(403, "Read-only access")
+    if manage and not can_manage_project(user, member):
+        raise HTTPException(403, "Project administrator required")
     return project
 
 
@@ -78,7 +88,8 @@ def project_json(project, user, db):
     member = db.get(ProjectMember, (project.id, user.id))
     can_write = (user.role == "administrator" and not user.is_bot) or (user.role == "member" and (not member or member.role != "reader"))
     return {"id": project.id, "key": project.key, "slug": project.slug, "name": project.name,
-            "description": project.description, "visibility": project.visibility, "can_write": can_write}
+            "description": project.description, "visibility": project.visibility, "can_write": can_write,
+            "can_manage": can_manage_project(user, member)}
 
 
 def item_json(item, project):
@@ -166,6 +177,8 @@ async def callback(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(403, "Account disabled")
     if user.is_bot:
         raise HTTPException(403, "Bot accounts cannot sign in through OIDC")
+    user.last_login_at = utcnow()
+    db.commit()
     request.session.clear()
     request.session.update(user_id=user.id, csrf=secrets.token_urlsafe(32))
     request.state.rotate_session = True
@@ -207,6 +220,8 @@ def create_project(payload: ProjectCreate, user: User = Depends(organization_use
     project = Project(**payload.model_dump(exclude={"slug"}), slug=slug)
     db.add(project)
     try:
+        db.flush()
+        db.add(ProjectMember(project_id=project.id, user_id=user.id, role="administrator"))
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -216,9 +231,7 @@ def create_project(payload: ProjectCreate, user: User = Depends(organization_use
 
 @app.put(api + "/projects/{project_id}", dependencies=[Depends(csrf)], tags=["Projects"])
 def update_project(project_id: str, payload: ProjectUpdate, user: User = Depends(organization_user), db: Session = Depends(get_db)):
-    project = project_access(db, project_id, user)
-    if user.role != "administrator":
-        raise HTTPException(403, "Administrator required")
+    project = project_access(db, project_id, user, manage=True)
     for field, value in payload.model_dump().items():
         setattr(project, field, value)
     db.commit()
@@ -226,17 +239,28 @@ def update_project(project_id: str, payload: ProjectUpdate, user: User = Depends
 
 
 @app.get(api + "/users", tags=["Projects"])
-def users(user: User = Depends(organization_user), db: Session = Depends(get_db)):
-    if user.role != "administrator":
+@app.get(api + "/projects/{project_id}/member-candidates", tags=["Projects"])
+def users(project_id: str | None = None, user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    if project_id:
+        project_access(db, project_id, user, manage=True)
+    elif user.role != "administrator":
         raise HTTPException(403, "Administrator required")
     return [{"id": u.id, "name": u.name, "email": u.email, "role": u.role, "is_bot": u.is_bot} for u in db.scalars(select(User).where(User.active.is_(True)).order_by(User.name))]
 
 
+@app.get(api + "/admin/users", tags=["Application settings"])
+def application_users(user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    if user.role != "administrator" or user.is_bot:
+        raise HTTPException(403, "Application administrator required")
+    return [{"id": target.id, "name": target.name, "email": target.email,
+             "role": target.role, "active": target.active, "avatar_url": avatar_url(target) if target.active and target.role else None,
+             "last_login_at": target.last_login_at.replace(tzinfo=target.last_login_at.tzinfo or timezone.utc).isoformat() if target.last_login_at else None}
+            for target in db.scalars(select(User).where(User.is_bot.is_(False)).order_by(User.name, User.id))]
+
+
 @app.get(api + "/projects/{project_id}/members", tags=["Projects"])
 def project_members(project_id: str, user: User = Depends(organization_user), db: Session = Depends(get_db)):
-    project_access(db, project_id, user)
-    if user.role != "administrator":
-        raise HTTPException(403, "Administrator required")
+    project_access(db, project_id, user, manage=True)
     rows = db.execute(select(ProjectMember, User).join(User, User.id == ProjectMember.user_id)
                       .where(ProjectMember.project_id == project_id).order_by(User.name, User.id))
     return [{"user_id": target.id, "name": target.name, "email": target.email, "avatar_url": avatar_url(target),
@@ -252,9 +276,7 @@ def project_assignees(project_id: str, user: User = Depends(organization_user), 
 
 @app.delete(api + "/projects/{project_id}/members/{user_id}", dependencies=[Depends(csrf)], tags=["Projects"])
 def remove_member(project_id: str, user_id: str, user: User = Depends(organization_user), db: Session = Depends(get_db)):
-    project_access(db, project_id, user)
-    if user.role != "administrator":
-        raise HTTPException(403, "Administrator required")
+    project_access(db, project_id, user, manage=True)
     member = db.get(ProjectMember, (project_id, user_id))
     if not member:
         raise HTTPException(404, "Project member not found")
@@ -265,14 +287,14 @@ def remove_member(project_id: str, user_id: str, user: User = Depends(organizati
 
 @app.put(api + "/projects/{project_id}/members", dependencies=[Depends(csrf)], tags=["Projects"])
 def set_member(project_id: str, payload: MemberCreate, user: User = Depends(organization_user), db: Session = Depends(get_db)):
-    project_access(db, project_id, user)
-    if user.role != "administrator":
-        raise HTTPException(403, "Administrator required")
+    project_access(db, project_id, user, manage=True)
     target = db.get(User, payload.user_id)
     if not target or not target.active or not target.role:
         raise HTTPException(404, "Organization member not found")
     if target.is_bot and (payload.role == "administrator" or (target.role == "reader" and payload.role == "member")):
         raise HTTPException(403, "Bot project access cannot exceed its account role")
+    if payload.role == "administrator" and target.role == "reader":
+        raise HTTPException(403, "Project administration requires organization member permissions")
     db.merge(ProjectMember(project_id=project_id, **payload.model_dump()))
     db.commit()
     return {"ok": True}
@@ -280,8 +302,8 @@ def set_member(project_id: str, payload: MemberCreate, user: User = Depends(orga
 
 def label_scope(db, user, project_id=None, write=False):
     if project_id:
-        project_access(db, project_id, user)
-    if write and user.role != "administrator":
+        project_access(db, project_id, user, manage=write)
+    elif write and user.role != "administrator":
         raise HTTPException(403, "Administrator required")
 
 
@@ -360,8 +382,9 @@ def delete_label(label_id: str, project_id: str | None = None, user: User = Depe
 
 
 @app.get(api + "/projects/{project_id}/items", tags=["Work items"])
-def items(project_id: str, q: str = Query("", max_length=200), status: Status | None = None,
-          label: str | None = Query(None, max_length=50), sort: str = Query("updated", pattern="^(updated|created|title)$"),
+def items(project_id: str, q: str = Query("", max_length=200), status: list[Status] | None = Query(None, max_length=100),
+          label: list[Annotated[str, Field(max_length=50)]] | None = Query(None, max_length=100),
+          sort: str = Query("updated", pattern="^(updated|created|title)$"),
           page: int = Query(1, ge=1), per_page: int = Query(25, ge=1, le=100),
           user: User = Depends(organization_user), db: Session = Depends(get_db)):
     project = project_access(db, project_id, user)
@@ -370,12 +393,12 @@ def items(project_id: str, q: str = Query("", max_length=200), status: Status | 
         escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         query = query.where(or_(WorkItem.title.ilike(f"%{escaped}%", escape="\\"), WorkItem.description.ilike(f"%{escaped}%", escape="\\")))
     if status:
-        query = query.where(WorkItem.status == status)
+        query = query.where(WorkItem.status.in_(status))
     if label:
-        # JSON array membership through SQL's table-valued function on PostgreSQL.
+        # Match any selected label without duplicating items in counts/pagination.
         from sqlalchemy import cast
         from sqlalchemy.dialects.postgresql import JSONB
-        query = query.where(cast(WorkItem.labels, JSONB).contains([label]))
+        query = query.where(or_(*(cast(WorkItem.labels, JSONB).contains([name]) for name in set(label))))
     total = db.scalar(select(func.count()).select_from(query.subquery()))
     order = {"updated": WorkItem.updated_at.desc(), "created": WorkItem.created_at.desc(), "title": WorkItem.title.asc()}[sort]
     rows = db.scalars(query.order_by(order, WorkItem.id).offset((page - 1) * per_page).limit(per_page))

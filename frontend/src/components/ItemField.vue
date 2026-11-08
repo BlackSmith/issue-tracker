@@ -21,7 +21,7 @@ async function edit() {
   editing.value = true
   emit('editing', true)
   await nextTick()
-  form.value?.querySelector<HTMLElement>('input, select, [contenteditable="true"]')?.focus()
+  form.value?.querySelector<HTMLElement>('input, [role="combobox"], [contenteditable="true"]')?.focus()
 }
 function cancel() {
   if (props.disabled || uploading.value) return
@@ -41,17 +41,17 @@ async function submit() {
   <div class="item-field" :class="{ 'is-editing': editing }">
     <div class="item-field-heading">
       <span v-if="kind !== 'text'" class="item-field-label">{{ label }}</span>
-      <button v-if="canWrite && !editing" class="quiet item-field-edit" :disabled="disabled" :aria-label="`Edit ${label}`" @click="edit">Edit</button>
+      <PButton v-if="canWrite && !editing" class="quiet item-field-edit" :disabled="disabled" :aria-label="`Edit ${label}`" @click="edit">Edit</PButton>
     </div>
     <form v-if="editing" ref="form" class="item-field-form" :aria-label="`Edit ${label}`" @submit.prevent="submit" @keydown.esc.stop.prevent="cancel">
-      <LabelPicker v-if="kind === 'labels'" v-model="labelDraft" :definitions="labelDefinitions || []" :disabled="disabled" />
+      <LabelPicker v-if="kind === 'labels'" v-model="labelDraft" :definitions="labelDefinitions || []" :disabled="disabled" :show-label="false" />
       <label v-else-if="kind !== 'description'">
         <span class="sr-only">{{ label }}</span>
-        <select v-if="kind === 'select'" v-model="draft" :disabled="disabled"><option v-for="option in selectOptions" :key="option.value" :value="option.value" :disabled="option.disabled">{{ option.label }}</option></select>
-        <input v-else v-model="draft" :type="kind === 'date' ? 'date' : 'text'" :required="kind === 'text'" :maxlength="kind === 'text' ? 250 : undefined" :disabled="disabled" />
+        <PSelect v-if="kind === 'select'" v-model="draft" :options="selectOptions" option-label="label" option-value="value" option-disabled="disabled" :placeholder="selectOptions?.find(option => option.value === '')?.label" :aria-label="label" :disabled="disabled" filter @keydown.esc.stop />
+        <InputText v-else v-model="draft" :type="kind === 'date' ? 'date' : 'text'" :required="kind === 'text'" :maxlength="kind === 'text' ? 250 : undefined" :disabled="disabled" />
       </label>
       <RichTextEditor v-else v-model="draft" :label="label" :item-id="itemId" :project-id="projectId" :disabled="disabled" @uploading="uploading = $event" @uploaded="emit('uploaded')" />
-      <div class="item-field-actions"><button type="button" :disabled="disabled || uploading" @click="cancel">Cancel</button><button class="primary" :disabled="disabled || uploading">Save</button></div>
+      <div class="item-field-actions"><PButton type="button" severity="secondary" outlined :disabled="disabled || uploading" @click="cancel">Cancel</PButton><PButton type="submit" :disabled="disabled || uploading">Save</PButton></div>
     </form>
     <slot v-else />
   </div>

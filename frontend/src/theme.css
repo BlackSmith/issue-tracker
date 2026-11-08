@@ -1,3 +1,4 @@
+@layer legacy {
 :root {
   --accent: #26734d;
   --app-background: #ffffff;
@@ -95,4 +96,5 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .account-profile { gap: 6px; padding: 3px; }
   .settings-icon { font-size: 15px; }
   .topbar { gap: 10px; }
+}
 }

@@ -84,33 +84,33 @@ async function removeAvatar() {
           <UserAvatar class="profile-picture" :name="form.name || auth.user?.name || '?'" :src="auth.user?.avatar_url" />
           <div>
             <div class="profile-picture-actions">
-              <button type="button" :disabled="busy" @click="avatarInput?.click()">{{ avatarBusy ? 'Updating…' : 'Upload picture' }}</button>
-              <button v-if="auth.user?.avatar_url" type="button" class="quiet" :disabled="busy" @click="removeAvatar">Remove picture</button>
+              <PButton type="button" severity="secondary" outlined :disabled="busy" @click="avatarInput?.click()">{{ avatarBusy ? 'Updating…' : 'Upload picture' }}</PButton>
+              <PButton v-if="auth.user?.avatar_url" type="button" class="quiet" :disabled="busy" @click="removeAvatar">Remove picture</PButton>
             </div>
             <p class="hint">PNG, JPEG, GIF or WebP · up to 5 MB. Cropped to a square and saved immediately.</p>
             <input ref="avatarInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Profile picture" hidden :disabled="busy" @change="uploadAvatar" />
           </div>
         </div>
         <div class="profile-fields">
-          <label>Display name<input v-model="form.name" name="name" autocomplete="name" required maxlength="200" :disabled="busy" /></label>
-          <label>Contact email<input v-model="form.email" name="email" type="email" autocomplete="email" required maxlength="320" :disabled="busy" /><small>Sign-in is managed by your identity provider. Changing this address updates your profile contact email.</small></label>
+          <label>Display name<InputText v-model="form.name" name="name" autocomplete="name" required maxlength="200" :disabled="busy" /></label>
+          <label>Contact email<InputText v-model="form.email" name="email" type="email" autocomplete="email" required maxlength="320" :disabled="busy" /><small>Sign-in is managed by your identity provider. Changing this address updates your profile contact email.</small></label>
         </div>
       </section>
       <section class="settings-card" aria-labelledby="appearance-heading">
         <header><h2 id="appearance-heading">Appearance</h2><p>Preview your colors immediately. Save to keep them across sessions and devices.</p></header>
         <fieldset :disabled="busy"><legend>Interface color</legend>
-          <div class="appearance-options"><button v-for="option in accentOptions" :key="option.id" type="button" :aria-pressed="form.theme_accent === option.id" @click="form.theme_accent = option.id"><span class="color-swatch" :style="{ backgroundColor: option.color }" aria-hidden="true"></span>{{ option.name }}<span class="choice-check" aria-hidden="true">{{ form.theme_accent === option.id ? '✓' : '' }}</span></button></div>
+          <div class="appearance-options"><PButton v-for="option in accentOptions" :key="option.id" type="button" severity="secondary" outlined :disabled="busy" :aria-pressed="form.theme_accent === option.id" @click="form.theme_accent = option.id"><span class="color-swatch" :style="{ backgroundColor: option.color }" aria-hidden="true"></span>{{ option.name }}<span class="choice-check" aria-hidden="true">{{ form.theme_accent === option.id ? '✓' : '' }}</span></PButton></div>
         </fieldset>
         <fieldset :disabled="busy"><legend>Application background</legend>
-          <div class="appearance-options background-options"><button v-for="option in backgroundOptions" :key="option.id" type="button" :aria-pressed="form.theme_background === option.id" @click="form.theme_background = option.id"><span class="color-swatch" :style="{ backgroundColor: option.color }" aria-hidden="true"></span>{{ option.name }}<span class="choice-check" aria-hidden="true">{{ form.theme_background === option.id ? '✓' : '' }}</span></button></div>
+          <div class="appearance-options background-options"><PButton v-for="option in backgroundOptions" :key="option.id" type="button" severity="secondary" outlined :disabled="busy" :aria-pressed="form.theme_background === option.id" @click="form.theme_background = option.id"><span class="color-swatch" :style="{ backgroundColor: option.color }" aria-hidden="true"></span>{{ option.name }}<span class="choice-check" aria-hidden="true">{{ form.theme_background === option.id ? '✓' : '' }}</span></PButton></div>
         </fieldset>
-        <button type="button" class="quiet" :disabled="busy" @click="Object.assign(form, defaultAppearance)">Reset appearance to default</button>
+        <PButton type="button" class="quiet" :disabled="busy" @click="Object.assign(form, defaultAppearance)">Reset appearance to default</PButton>
       </section>
-      <div class="settings-status" aria-live="polite"><p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="success" class="success-message" role="status">{{ success }}</p></div>
-      <footer class="settings-footer"><span>{{ dirty ? 'You have unsaved changes.' : 'Your preferences are up to date.' }}</span><div><button type="button" :disabled="busy || !dirty" @click="discard">Discard changes</button><button class="primary" :disabled="busy || !dirty">{{ saving ? 'Saving…' : 'Save settings' }}</button></div></footer>
+      <div class="settings-status" aria-live="polite"><PMessage v-if="error" severity="error">{{ error }}</PMessage><PMessage v-if="success" severity="success">{{ success }}</PMessage></div>
+      <footer class="settings-footer"><span>{{ dirty ? 'You have unsaved changes.' : 'Your preferences are up to date.' }}</span><div><PButton type="button" severity="secondary" outlined :disabled="busy || !dirty" @click="discard">Discard changes</PButton><PButton type="submit" :loading="saving" :disabled="busy || !dirty">Save settings</PButton></div></footer>
     </form>
     <TokenManager v-if="auth.user?.role" :owner-role="auth.user.role" />
-    <section v-if="auth.user?.role === 'administrator'" class="settings-card automation-settings"><h2>Automation accounts</h2><p class="hint">Give integrations and AI tools a dedicated bot identity with explicit project access.</p><RouterLink to="/admin/bots" class="button">Manage bot accounts →</RouterLink></section>
+    <section v-if="auth.user?.role === 'administrator'" class="settings-card automation-settings"><h2>Automation accounts</h2><p class="hint">Give integrations and AI tools a dedicated bot identity with explicit project access.</p><RouterLink to="/admin/settings?tab=bots" class="button">Manage bot accounts →</RouterLink></section>
   </main>
 </template>
 

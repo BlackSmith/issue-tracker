@@ -6,7 +6,7 @@ import ProjectMembers from './ProjectMembers.vue'
 import LabelManager from './LabelManager.vue'
 
 const props = defineProps<{ project: Project }>()
-const emit = defineEmits<{ close: []; updated: [project: Project]; labelsUpdated: [] }>()
+const emit = defineEmits<{ close: []; updated: [project: Project]; labelsUpdated: []; permissionsUpdated: [] }>()
 const tab = ref('general'), busy = ref(false), error = ref(''), message = ref('')
 const form = ref({ name: props.project.name, description: props.project.description, visibility: props.project.visibility })
 
@@ -23,33 +23,36 @@ async function save() {
 </script>
 
 <template>
-  <div class="modal-backdrop" @click.self="!busy && emit('close')" @keydown.esc.stop="!busy && emit('close')">
-    <section class="modal project-settings-modal" role="dialog" aria-modal="true" aria-labelledby="project-settings-heading" :aria-busy="busy">
-      <header><div><h2 id="project-settings-heading">Project settings</h2><p class="hint">{{ project.name }}</p></div><button type="button" class="quiet" :disabled="busy" aria-label="Close project settings" @click="emit('close')">×</button></header>
-      <nav class="settings-tabs" aria-label="Project settings sections">
-        <button type="button" :class="{ primary: tab === 'general' }" :aria-pressed="tab === 'general'" :disabled="busy" @click="tab = 'general'">General</button>
-        <button type="button" :class="{ primary: tab === 'members' }" :aria-pressed="tab === 'members'" :disabled="busy" @click="tab = 'members'">Members</button>
-        <button type="button" :class="{ primary: tab === 'labels' }" :aria-pressed="tab === 'labels'" @click="tab = 'labels'">Labels</button>
-      </nav>
-      <form v-show="tab === 'general'" @submit.prevent="save">
-        <label>Project name<input v-model="form.name" required maxlength="150" :disabled="busy" /></label>
-        <label>Description<textarea v-model="form.description" rows="4" maxlength="10000" :disabled="busy" /></label>
-        <label>Visibility<select v-model="form.visibility" :disabled="busy"><option value="organization">Organization — visible to all members</option><option value="private">Private — project members only</option></select></label>
+  <PDialog :visible="true" modal header="Project settings" class="project-settings-modal" :closable="!busy" :dismissable-mask="!busy" :close-on-escape="!busy" @update:visible="!$event && emit('close')">
+      <p class="hint">{{ project.name }}</p>
+      <PTabs v-model:value="tab">
+        <PTabList aria-label="Project settings sections">
+          <PTab value="general" :disabled="busy">General</PTab>
+          <PTab value="members" :disabled="busy">Members</PTab>
+          <PTab value="labels" :disabled="busy">Labels</PTab>
+        </PTabList>
+        <PTabPanels>
+          <PTabPanel value="general">
+      <form @submit.prevent="save">
+        <label>Project name<InputText v-model="form.name" required maxlength="150" :disabled="busy" /></label>
+        <label>Description<PTextarea v-model="form.description" rows="4" maxlength="10000" :disabled="busy" /></label>
+        <label>Visibility<SelectButton v-model="form.visibility" :options="[{ label: 'Organization', value: 'organization' }, { label: 'Private', value: 'private' }]" option-label="label" option-value="value" :allow-empty="false" aria-label="Visibility" :disabled="busy" /><small>Organization: visible to all organization members. Private: project members only.</small></label>
         <p class="hint">Private projects are accessible only to explicit project members and organization administrators. Bots always require explicit membership.</p>
-        <div class="form-grid"><label>Project key<input :value="project.key" readonly /></label><label>Project URL<input :value="`/${project.slug}/`" readonly /></label></div>
+        <div class="form-grid"><label>Project key<InputText :model-value="project.key" readonly /></label><label>Project URL<InputText :model-value="`/${project.slug}/`" readonly /></label></div>
         <p class="hint">The project key and URL stay stable when you rename the project.</p>
-        <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="message" class="hint" role="status">{{ message }}</p>
-        <footer><button type="button" :disabled="busy" @click="emit('close')">Close</button><button class="primary" :disabled="busy">{{ busy ? 'Saving…' : 'Save changes' }}</button></footer>
+        <PMessage v-if="error" severity="error">{{ error }}</PMessage><PMessage v-if="message" severity="success">{{ message }}</PMessage>
+        <footer><PButton type="button" severity="secondary" outlined :disabled="busy" @click="emit('close')">Close</PButton><PButton type="submit" :loading="busy" :disabled="busy">Save changes</PButton></footer>
       </form>
-      <ProjectMembers v-if="tab === 'members'" :project="project" embedded />
-      <LabelManager v-if="tab === 'labels'" :project-id="project.id" @updated="emit('labelsUpdated')" />
-    </section>
-  </div>
+          </PTabPanel>
+          <PTabPanel value="members"><ProjectMembers v-if="tab === 'members'" :project="project" embedded @updated="emit('permissionsUpdated')" /></PTabPanel>
+          <PTabPanel value="labels"><LabelManager v-if="tab === 'labels'" :project-id="project.id" @updated="emit('labelsUpdated')" /></PTabPanel>
+        </PTabPanels>
+      </PTabs>
+  </PDialog>
 </template>
 
 <style scoped>
 .project-settings-modal { width: 780px; max-width: 100%; }
 .project-settings-modal > header { align-items: flex-start; }
 .project-settings-modal > header h2 { margin-bottom: 4px; }
-.settings-tabs { display: flex; gap: 8px; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
 </style>

@@ -10,8 +10,9 @@ const props = withDefaults(defineProps<{
   title?: string
 }>(), { basePath: '/tokens', disabled: false, title: 'Personal API tokens' })
 const tokens = ref<ApiToken[]>([]), loading = ref(true), busy = ref(false), error = ref('')
+const showCreate = ref(false)
 const name = ref(''), access = ref('read'), secret = ref(''), revealedId = ref(''), copied = ref(false)
-const secretInput = ref<HTMLInputElement | null>(null)
+const secretInput = ref<{ $el: HTMLInputElement } | null>(null)
 const date = new Date(Date.now() + 30 * 86400000)
 const expiresAt = ref(new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16))
 let sequence = 0
@@ -25,7 +26,7 @@ async function load() {
   } catch (e) { if (current === sequence) error.value = (e as Error).message }
   finally { if (current === sequence) loading.value = false }
 }
-watch(() => props.basePath, () => { secret.value = ''; revealedId.value = ''; error.value = ''; tokens.value = []; void load() }, { immediate: true })
+watch(() => props.basePath, () => { showCreate.value = false; secret.value = ''; revealedId.value = ''; error.value = ''; tokens.value = []; void load() }, { immediate: true })
 watch(() => props.ownerRole, value => { if (value === 'reader') access.value = 'read' })
 
 async function create() {
@@ -39,6 +40,7 @@ async function create() {
     secret.value = token; revealedId.value = metadata.id
     tokens.value = [metadata, ...tokens.value]
     name.value = ''
+    showCreate.value = false
   } catch (e) { error.value = (e as Error).message }
   finally { busy.value = false }
 }
@@ -55,28 +57,30 @@ async function copy() {
   try {
     if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(secret.value)
     else {
-      secretInput.value?.select()
+      secretInput.value?.$el.select()
       if (!document.execCommand('copy')) throw new Error()
     }
     copied.value = true
-  } catch { secretInput.value?.select(); error.value = 'Select and copy the token shown above.' }
+  } catch { secretInput.value?.$el.select(); error.value = 'Select and copy the token shown above.' }
 }
 function formatted(value: string | null) { return value ? new Date(value).toLocaleString() : 'Never' }
 </script>
 
 <template>
   <section class="token-manager">
-    <header><div><h2>{{ title }}</h2><p>Use a separate token for each integration or AI tool. Access is limited by the account and its project permissions.</p></div><button type="button" class="quiet" :disabled="loading || busy" @click="error = ''; load()">Refresh</button></header>
-    <form class="token-create-form" @submit.prevent="create">
-      <label>Token name<input v-model="name" required maxlength="100" placeholder="e.g. AI assistant or reporting tool" :disabled="busy || disabled" /></label>
-      <div class="token-fields"><label>Permissions<select v-model="access" :disabled="busy || disabled"><option value="read">Read-only</option><option value="write" :disabled="ownerRole === 'reader'">Read and write</option></select></label><label>Expires at<input v-model="expiresAt" type="datetime-local" required :disabled="busy || disabled" /></label></div>
-      <div class="token-create-footer"><span>{{ disabled ? 'Enable this bot before issuing a token.' : 'Expiration is required, up to one year. Browser login is separate from API access.' }}</span><button class="primary" :disabled="busy || disabled">{{ busy ? 'Working…' : 'Create token' }}</button></div>
+    <header><div><h2>{{ title }}</h2><p>Use a separate token for each integration or AI tool. Access is limited by the account and its project permissions.</p></div><PButton type="button" class="quiet" :disabled="loading || busy" @click="error = ''; load()">Refresh</PButton></header>
+    <PButton v-if="!showCreate" type="button" class="token-create-toggle" :disabled="busy || disabled" :aria-expanded="false" @click="showCreate = true; error = ''">Create token</PButton>
+    <p v-if="disabled && !showCreate" class="hint">Enable this bot before issuing a token.</p>
+    <form v-if="showCreate" class="token-create-form" @submit.prevent="create">
+      <label>Token name<InputText v-model="name" required maxlength="100" placeholder="e.g. AI assistant or reporting tool" :disabled="busy || disabled" /></label>
+      <div class="token-fields"><label>Permissions<PSelect v-model="access" :options="[{ label: 'Read-only', value: 'read' }, { label: 'Read and write', value: 'write', disabled: ownerRole === 'reader' }]" option-label="label" option-value="value" option-disabled="disabled" aria-label="Permissions" :disabled="busy || disabled" /></label><label>Expires at<InputText v-model="expiresAt" type="datetime-local" required :disabled="busy || disabled" /></label></div>
+      <div class="token-create-footer"><span>{{ disabled ? 'Enable this bot before issuing a token.' : 'Expiration is required, up to one year. Browser login is separate from API access.' }}</span><div class="token-create-actions"><PButton type="button" severity="secondary" outlined :disabled="busy" @click="showCreate = false">Cancel</PButton><PButton type="submit" :loading="busy" :disabled="busy || disabled">Create token</PButton></div></div>
     </form>
-    <div v-if="secret" class="token-reveal" role="status"><strong>Copy your token now</strong><p>The full value is shown only once.</p><div><input ref="secretInput" :value="secret" readonly aria-label="New API token" spellcheck="false" /><button type="button" @click="copy">{{ copied ? 'Copied' : 'Copy' }}</button></div><button type="button" class="quiet" @click="secret = ''">I have saved the token</button></div>
+    <div v-if="secret" class="token-reveal" role="status"><strong>Copy your token now</strong><p>The full value is shown only once.</p><div><InputText ref="secretInput" :model-value="secret" readonly aria-label="New API token" spellcheck="false" /><PButton type="button" @click="copy">{{ copied ? 'Copied' : 'Copy' }}</PButton></div><PButton type="button" class="quiet" @click="secret = ''">I have saved the token</PButton></div>
     <p v-if="error" class="error" role="alert">{{ error }}</p>
     <p v-if="loading" class="hint">Loading tokens…</p>
     <p v-else-if="!tokens.length" class="hint">No tokens yet. Create one to connect an integration.</p>
-    <ul v-else class="token-list"><li v-for="token in tokens" :key="token.id"><div class="token-row-top"><strong>{{ token.name }}</strong><span class="token-state" :data-status="token.status">{{ token.status }}</span><button type="button" :disabled="busy || token.status === 'revoked'" @click="revoke(token)">Revoke</button></div><code>{{ token.prefix }}…</code><div class="token-metadata"><span>{{ token.scopes.includes('write') ? 'Read and write' : 'Read-only' }}</span><span>Expires {{ formatted(token.expires_at) }}</span><span>Last used {{ formatted(token.last_used_at) }}</span></div></li></ul>
+    <ul v-else class="token-list"><li v-for="token in tokens" :key="token.id"><div class="token-row-top"><strong>{{ token.name }}</strong><span class="token-state" :data-status="token.status">{{ token.status }}</span><PButton type="button" severity="danger" outlined :disabled="busy || token.status === 'revoked'" @click="revoke(token)">Revoke</PButton></div><code>{{ token.prefix }}…</code><div class="token-metadata"><span>{{ token.scopes.includes('write') ? 'Read and write' : 'Read-only' }}</span><span>Expires {{ formatted(token.expires_at) }}</span><span>Last used {{ formatted(token.last_used_at) }}</span></div></li></ul>
   </section>
 </template>
 
@@ -90,6 +94,8 @@ function formatted(value: string | null) { return value ? new Date(value).toLoca
 .token-create-footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 22px; }
 .token-create-footer > span { font-size: 10px; line-height: 1.7; color: var(--muted); max-width: 370px; }
 .token-create-footer button { flex-shrink: 0; }
+.token-create-toggle { margin-bottom: 18px; }
+.token-create-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
 .token-reveal { border: 1px solid var(--accent-border); border-radius: 7px; background: var(--accent-soft); padding: 15px; margin: 18px 0; }
 .token-reveal strong { color: var(--accent); font-size: 13px; }
 .token-reveal p { color: var(--muted); font-size: 12px; margin: 8px 0; }
@@ -106,5 +112,5 @@ function formatted(value: string | null) { return value ? new Date(value).toLoca
 .token-state[data-status="revoked"], .token-state[data-status="expired"] { background: #f1f2f4; color: #7c7f86; }
 .token-list code { color: var(--muted); font-size: 10px; }
 .token-metadata { display: flex; flex-wrap: wrap; gap: 7px 16px; color: var(--muted); font-size: 10px; margin-top: 9px; line-height: 1.7; }
-@media(max-width: 720px) { .token-manager { padding: 18px; } .token-fields { grid-template-columns: 1fr; gap: 0; } .token-create-footer { align-items: flex-start; } }
+@media(max-width: 720px) { .token-manager { padding: 18px; } .token-fields { grid-template-columns: 1fr; gap: 0; } .token-create-footer { align-items: flex-start; flex-wrap: wrap; } }
 </style>

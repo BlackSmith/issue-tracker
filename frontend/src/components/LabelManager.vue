@@ -9,6 +9,7 @@ const emit = defineEmits<{ updated: [] }>()
 const base = computed(() => props.projectId ? `/projects/${props.projectId}/labels` : '/organization/labels')
 const labels = ref<LabelDefinition[]>([]), busy = ref(false), loading = ref(true), error = ref(''), message = ref('')
 const editing = ref('')
+const showForm = ref(false)
 const empty = () => ({ name: '', color: '#16a34a', description: '' })
 const form = ref(empty())
 async function load() {
@@ -18,11 +19,12 @@ async function load() {
 }
 onMounted(load)
 function edit(label: LabelDefinition) {
+  showForm.value = true
   editing.value = label.id
   form.value = { name: label.name, color: label.color, description: label.description }
   error.value = ''; message.value = ''
 }
-function cancel() { editing.value = ''; form.value = empty() }
+function cancel() { editing.value = ''; form.value = empty(); showForm.value = false }
 async function save() {
   busy.value = true; error.value = ''; message.value = ''
   try {
@@ -46,24 +48,27 @@ async function remove(label: LabelDefinition) {
 <template>
   <section class="label-manager" aria-label="Label management">
     <p class="hint">{{ projectId ? 'All organization labels are inherited automatically. Manage inherited labels in organization settings.' : 'Organization labels are available in every project, including projects created later.' }}</p>
+    <PMessage v-if="error" severity="error">{{ error }}</PMessage><PMessage v-if="message" severity="success">{{ message }}</PMessage>
+    <PButton v-if="!showForm" type="button" class="add-label-toggle" :disabled="busy || loading" :aria-expanded="false" @click="showForm = true; error = ''; message = ''">Add label</PButton>
+    <form v-else class="label-form" @submit.prevent="save">
+      <h3>{{ editing ? 'Edit label' : 'Add label' }}</h3>
+      <div class="label-form-fields">
+        <label>Name<InputText v-model="form.name" required maxlength="50" :disabled="busy" /></label>
+        <label>Color<input v-model="form.color" type="color" required :disabled="busy" /></label>
+      </div>
+      <label>Description<PTextarea v-model="form.description" rows="2" maxlength="2000" :disabled="busy" /></label>
+      <p class="hint">Names must be unique among the labels available in a project. Renaming preserves existing ticket assignments. Used labels cannot be deleted.</p>
+      <footer><PButton type="button" severity="secondary" outlined :disabled="busy" @click="cancel">Cancel</PButton><PButton type="submit" :loading="busy" :disabled="busy || loading">{{ editing ? 'Save label' : 'Add label' }}</PButton></footer>
+    </form>
     <p v-if="loading" class="hint">Loading labels…</p>
     <ul v-else class="managed-labels">
       <li v-for="label in labels" :key="label.id">
         <div><LabelBadge :name="label.name" :definition="label" /><p v-if="label.description">{{ label.description }}</p><small>{{ label.project_id ? 'Project label' : 'Organization label' }}</small></div>
-        <div v-if="label.project_id === (projectId || null)" class="label-actions"><button :disabled="busy" @click="edit(label)">Edit</button><button :disabled="busy" @click="remove(label)">Delete</button></div>
+        <div v-if="label.project_id === (projectId || null)" class="label-actions"><PButton severity="secondary" outlined :disabled="busy" @click="edit(label)">Edit</PButton><PButton severity="danger" outlined :disabled="busy" @click="remove(label)">Delete</PButton></div>
         <small v-else>Inherited</small>
       </li>
     </ul>
     <p v-if="!loading && !labels.length" class="hint">No labels defined yet.</p>
-    <form @submit.prevent="save">
-      <h3>{{ editing ? 'Edit label' : 'Create label' }}</h3>
-      <label>Name<input v-model="form.name" required maxlength="50" :disabled="busy" /></label>
-      <label>Color<input v-model="form.color" type="color" required :disabled="busy" /></label>
-      <label>Description<textarea v-model="form.description" rows="3" maxlength="2000" :disabled="busy" /></label>
-      <p class="hint">Names must be unique among the labels available in a project. Renaming preserves existing ticket assignments. Used labels cannot be deleted.</p>
-      <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="message" class="hint" role="status">{{ message }}</p>
-      <footer><button v-if="editing" type="button" :disabled="busy" @click="cancel">Cancel</button><button class="primary" :disabled="busy || loading">{{ busy ? 'Saving…' : editing ? 'Save label' : 'Create label' }}</button></footer>
-    </form>
   </section>
 </template>
 
@@ -73,5 +78,11 @@ async function remove(label: LabelDefinition) {
 .managed-labels li > div:first-child { min-width: 0; }
 .managed-labels p { margin: 6px 0; white-space: pre-wrap; }
 .label-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.add-label-toggle { margin-bottom: 16px; }
+.label-form { border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 16px; }
+.label-form h3 { margin-bottom: 10px; }
+.label-form-fields { display: grid; grid-template-columns: minmax(0, 1fr) 80px; gap: 10px; }
+.label-form label { min-width: 0; gap: 5px; margin-bottom: 10px; font-size: 12px; }
+.label-form footer { display: flex; justify-content: flex-end; gap: 8px; }
 input[type=color] { width: 80px; height: 40px; padding: 4px; }
 </style>

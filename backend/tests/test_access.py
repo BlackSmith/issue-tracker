@@ -111,7 +111,8 @@ def test_project_membership_and_organization_role_ceiling(env):
     assert admin.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["member"], "role": "reader"}).status_code == 200
     assert member.get(f"/api/v1/projects/{pid}/items").status_code == 200
     assert member.post(f"/api/v1/projects/{pid}/items", json={"title": "No"}).status_code == 403
-    assert admin.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["reader"], "role": "administrator"}).status_code == 200
+    assert admin.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["reader"], "role": "administrator"}).status_code == 403
+    assert admin.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["reader"], "role": "reader"}).status_code == 200
     assert reader.post(f"/api/v1/projects/{pid}/items", json={"title": "No"}).status_code == 403
     assert member.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["member"], "role": "administrator"}).status_code == 403
 
@@ -123,21 +124,22 @@ def test_member_management_and_revoked_private_access(env):
     iid = item(admin, pid)
     url = admin.post(f"/api/v1/items/{iid}/attachments", files={"file": ("note.txt", b"private")}).json()["url"]
     path = f"/api/v1/projects/{pid}/members"
-    assert admin.get(path).json() == []
+    creator = admin.get(path).json()
+    assert len(creator) == 1 and creator[0]['user_id'] == people['administrator']
     assert admin.put(path, json={"user_id": people["member"], "role": "member"}).status_code == 200
     rows = admin.get(path).json()
-    assert len(rows) == 1
-    assert rows[0] == {"user_id": people["member"], "name": "member", "email": "member@example.test",
+    assert len(rows) == 2
+    assert next(row for row in rows if row['user_id'] == people['member']) == {"user_id": people["member"], "name": "member", "email": "member@example.test",
                        "role": "member", "organization_role": "member", "active": True, "is_bot": False, "avatar_url": None}
     assert member.post(f"/api/v1/projects/{pid}/items", json={"title": "Allowed"}).status_code == 201
     assert member.get(path).status_code == 403
     assert member.delete(f"{path}/{people['member']}").status_code == 403
     assert admin.put(path, json={"user_id": people["member"], "role": "reader"}).status_code == 200
-    assert admin.get(path).json()[0]["role"] == "reader"
+    assert next(row for row in admin.get(path).json() if row['user_id'] == people['member'])["role"] == "reader"
     assert member.post(f"/api/v1/projects/{pid}/items", json={"title": "Denied"}).status_code == 403
     assert member.get(url).status_code == 200
     assert admin.delete(f"{path}/{people['member']}").status_code == 200
-    assert admin.get(path).json() == []
+    assert admin.get(path).json() == creator
     assert member.get(f"/api/v1/items/{iid}").status_code == 404
     assert member.get(url).status_code == 404
     assert admin.delete(f"{path}/{people['member']}").status_code == 404
@@ -170,7 +172,7 @@ def test_inactive_members_remain_visible_and_can_be_removed(env):
     with factory() as db:
         db.get(User, people["member"]).active = False
         db.commit()
-    assert admin.get(path).json()[0]["active"] is False
+    assert next(row for row in admin.get(path).json() if row['user_id'] == people['member'])["active"] is False
     assert admin.delete(f"{path}/{people['member']}").status_code == 200
 
 

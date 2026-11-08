@@ -39,6 +39,8 @@ const pasteControllers = new Set<AbortController>()
 const suggestionId = useId()
 const suggestions = reactive({ visible: false, loading: false, kind: 'user' as 'user' | 'ticket',
   items: [] as Reference[], selected: 0, from: 0, to: 0, top: 0, left: 0, width: 360 })
+// A ref-backed template view keeps vue-tsc's slot narrowing on a real ref.
+const suggestionView = computed(() => suggestions)
 let suggestionController: AbortController | undefined
 let suggestionTimer: ReturnType<typeof setTimeout> | undefined
 let suggestionRequest = 0
@@ -215,8 +217,8 @@ const blockStyle = computed(() => {
   if (editor.value?.isActive('heading')) return String(editor.value.getAttributes('heading').level)
   return 'paragraph'
 })
-function setBlock(event: Event) {
-  const value = (event.target as HTMLSelectElement).value
+const blockOptions = [{ label: 'Normal text', value: 'paragraph' }, ...Array.from({ length: 6 }, (_, i) => ({ label: `Heading ${i + 1}`, value: String(i + 1) }))]
+function setBlock(value: string) {
   if (value === 'paragraph') editor.value?.chain().focus().setParagraph().run()
   else editor.value?.chain().focus().setHeading({ level: Number(value) as Level }).run()
 }
@@ -311,62 +313,59 @@ async function attach(files: File[]) {
 <template>
   <div class="rich-text-editor" :class="{ 'is-disabled': disabled }" :aria-busy="uploading">
     <div v-if="editor" class="rich-text-toolbar" role="toolbar" :aria-label="`${label} formatting`">
-      <select :value="blockStyle" :disabled="disabled" aria-label="Text style" title="Text style" @change="setBlock">
-        <option value="paragraph">Normal text</option>
-        <option v-for="level in 6" :key="level" :value="level">Heading {{ level }}</option>
-      </select>
-      <button v-for="format in formats" :key="format.name" type="button" :data-format="format.name"
+      <PSelect :model-value="blockStyle" :options="blockOptions" option-label="label" option-value="value" :disabled="disabled" aria-label="Text style" title="Text style" @update:model-value="setBlock" @keydown.esc.stop />
+      <PButton v-for="format in formats" :key="format.name" type="button" :data-format="format.name"
         :aria-label="format.label" :title="format.label" :aria-pressed="editor.isActive(format.name)"
-        :disabled="disabled" @mousedown.prevent @click="format.run">{{ format.text }}</button>
-      <button type="button" aria-label="Insert or edit link" title="Insert or edit link"
-        :aria-pressed="linkOpen || editor.isActive('link')" :disabled="disabled" @mousedown.prevent @click="editLink">Link</button>
-      <button type="button" aria-label="Insert table" title="Insert table" :disabled="disabled"
-        @mousedown.prevent @click="editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()">Table</button>
-      <button type="button" aria-label="Undo" title="Undo" :disabled="disabled || !editor.can().undo()"
-        @mousedown.prevent @click="editor.chain().focus().undo().run()">↶</button>
-      <button type="button" aria-label="Redo" title="Redo" :disabled="disabled || !editor.can().redo()"
-        @mousedown.prevent @click="editor.chain().focus().redo().run()">↷</button>
+        :disabled="disabled" @mousedown.prevent @click="format.run">{{ format.text }}</PButton>
+      <PButton type="button" aria-label="Insert or edit link" title="Insert or edit link"
+        :aria-pressed="linkOpen || editor.isActive('link')" :disabled="disabled" @mousedown.prevent @click="editLink">Link</PButton>
+      <PButton type="button" aria-label="Insert table" title="Insert table" :disabled="disabled"
+        @mousedown.prevent @click="editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()">Table</PButton>
+      <PButton type="button" aria-label="Undo" title="Undo" :disabled="disabled || !editor.can().undo()"
+        @mousedown.prevent @click="editor.chain().focus().undo().run()">↶</PButton>
+      <PButton type="button" aria-label="Redo" title="Redo" :disabled="disabled || !editor.can().redo()"
+        @mousedown.prevent @click="editor.chain().focus().redo().run()">↷</PButton>
     </div>
     <div v-if="linkOpen" class="rich-text-link" @keydown.esc.stop.prevent="linkOpen = false">
-      <input v-model="linkUrl" type="text" aria-label="Link address" placeholder="https://example.com"
+      <InputText v-model="linkUrl" type="text" aria-label="Link address" placeholder="https://example.com"
         :disabled="disabled" @keydown.enter.stop.prevent="applyLink" />
-      <button type="button" :disabled="disabled || !linkUrl.trim()" @click="applyLink">Apply link</button>
-      <button v-if="editor?.isActive('link')" type="button" :disabled="disabled"
-        @click="linkUrl = ''; applyLink()">Remove link</button>
-      <button type="button" @click="linkOpen = false" aria-label="Close link editor">×</button>
+      <PButton type="button" :disabled="disabled || !linkUrl.trim()" @click="applyLink">Apply link</PButton>
+      <PButton v-if="editor?.isActive('link')" type="button" :disabled="disabled"
+        @click="linkUrl = ''; applyLink()">Remove link</PButton>
+      <PButton type="button" @click="linkOpen = false" aria-label="Close link editor">×</PButton>
       <p v-if="linkError" class="error" role="alert">{{ linkError }}</p>
     </div>
     <div v-if="editor?.isActive('table')" class="rich-text-table-tools" aria-label="Table tools">
-      <button type="button" :disabled="disabled" @mousedown.prevent @click="editor.chain().focus().addRowAfter().run()">＋ Row</button>
-      <button type="button" :disabled="disabled" @mousedown.prevent @click="editor.chain().focus().addColumnAfter().run()">＋ Column</button>
-      <button type="button" :disabled="disabled" @mousedown.prevent @click="editor.chain().focus().deleteTable().run()">Remove table</button>
+      <PButton type="button" :disabled="disabled" @mousedown.prevent @click="editor.chain().focus().addRowAfter().run()">＋ Row</PButton>
+      <PButton type="button" :disabled="disabled" @mousedown.prevent @click="editor.chain().focus().addColumnAfter().run()">＋ Column</PButton>
+      <PButton type="button" :disabled="disabled" @mousedown.prevent @click="editor.chain().focus().deleteTable().run()">Remove table</PButton>
     </div>
     <EditorContent :editor="editor" class="rich-text-content" :class="{ 'is-empty': editor?.isEmpty }" />
     <p class="reference-help">Type @ to mention someone or # to link a ticket. Paste a ticket URL to show its title and status.</p>
     <div v-if="itemId || projectId" class="rich-text-attachments">
-      <button type="button" :disabled="disabled || uploading" @click="fileInput?.click()">＋ Attach files</button>
+      <PButton type="button" severity="secondary" outlined :disabled="disabled || uploading" @click="fileInput?.click()">＋ Attach files</PButton>
       <span>Drop files or paste an image · up to 20 MB</span>
       <input ref="fileInput" type="file" multiple hidden :aria-label="`${label} attachments`"
         @change="attach(Array.from(($event.target as HTMLInputElement).files || []))" />
     </div>
     <div v-if="uploading" class="rich-text-progress" role="status">Uploading… {{ progress }}%
-      <progress :value="progress || 0" max="100" />
+      <ProgressBar :value="progress || 0" :show-value="false" />
     </div>
     <p v-if="error" class="error rich-text-error" role="alert">{{ error }}</p>
   </div>
   <Teleport to="body">
-    <div v-if="suggestions.visible" :id="suggestionId" class="reference-suggestions" role="listbox"
-      :aria-label="suggestions.kind === 'user' ? 'Mention a user' : 'Link a ticket'"
-      :style="{ top: `${suggestions.top}px`, left: `${suggestions.left}px`, width: `${suggestions.width}px` }">
-      <div class="suggestion-heading">{{ suggestions.kind === 'user' ? 'Mention a user' : 'Link a ticket' }}</div>
-      <p v-if="suggestions.loading" role="status">Searching…</p>
-      <p v-else-if="!suggestions.items.length">No matching {{ suggestions.kind === 'user' ? 'users' : 'tickets' }}.</p>
-      <button v-for="(value, index) in suggestions.items" :id="`${suggestionId}-${index}`" :key="value.id" type="button" role="option" tabindex="-1"
-        :aria-selected="index === suggestions.selected" @mousedown.prevent @click="selectReference(value)"
-        @mouseenter="suggestions.selected = index">
+    <div v-if="suggestionView.visible" :id="suggestionId" class="reference-suggestions" role="listbox"
+      :aria-label="suggestionView.kind === 'user' ? 'Mention a user' : 'Link a ticket'"
+      :style="{ top: `${suggestionView.top}px`, left: `${suggestionView.left}px`, width: `${suggestionView.width}px` }">
+      <div class="suggestion-heading">{{ suggestionView.kind === 'user' ? 'Mention a user' : 'Link a ticket' }}</div>
+      <p v-if="suggestionView.loading" role="status">Searching…</p>
+      <p v-else-if="!suggestionView.items.length">No matching {{ suggestionView.kind === 'user' ? 'users' : 'tickets' }}.</p>
+      <PButton v-for="(value, index) in suggestionView.items" :id="`${suggestionId}-${index}`" :key="value.id" type="button" role="option" tabindex="-1"
+        :aria-selected="index === suggestionView.selected" @mousedown.prevent @click="selectReference(value)"
+        @mouseenter="suggestionView.selected = index">
         <template v-if="value.kind === 'user'"><strong>@{{ value.name }}</strong><small>{{ value.role }}</small></template>
         <template v-else><strong>{{ value.reference }} · {{ value.title }}</strong><small>{{ value.status }}</small></template>
-      </button>
+      </PButton>
     </div>
   </Teleport>
 </template>

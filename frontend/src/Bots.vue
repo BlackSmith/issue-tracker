@@ -1,4 +1,5 @@
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>()
 import { computed, ref, watch } from 'vue'
 import { api, auth } from './api'
 import type { BotAccount, BotProject, Project } from './types'
@@ -107,38 +108,39 @@ async function removeProject(id: string) {
 </script>
 
 <template>
-  <main class="bots-page">
-    <div class="breadcrumbs"><RouterLink to="/">Workspace</RouterLink><span>/</span> Bot accounts</div>
+  <component :is="embedded ? 'section' : 'main'" class="bots-page" :class="{ 'bots-embedded': embedded }">
+    <div v-if="!embedded" class="breadcrumbs"><RouterLink to="/">Workspace</RouterLink><span>/</span> Bot accounts</div>
     <p v-if="auth.user?.role !== 'administrator'" class="error" role="alert">Administrator access is required.</p>
     <template v-else>
       <header class="page-heading"><div><span class="eyebrow">AUTOMATION & INTEGRATIONS</span><h1>Bot accounts</h1><p>Give automations and AI tools their own identity and project access.</p></div></header>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <div class="bot-layout">
         <aside class="bot-sidebar">
-          <section class="bot-card"><h2>Create a bot</h2><form @submit.prevent="create"><label>Bot name<input v-model="createName" required maxlength="200" placeholder="e.g. AI assistant" :disabled="busy" /></label><label>Account permissions<select v-model="createRole" :disabled="busy"><option value="reader">Read-only</option><option value="member">Member — read and write</option></select></label><button class="primary" :disabled="busy">Create bot</button></form></section>
-          <nav aria-label="Bot accounts"><p v-if="loading" class="hint">Loading bots…</p><button v-for="bot in bots" :key="bot.id" type="button" :aria-pressed="selectedId === bot.id" :disabled="busy" @click="selectedId = bot.id"><UserAvatar :name="bot.name" :src="bot.avatar_url" /><span class="bot-identity">{{ bot.name }}<small>{{ bot.role === 'reader' ? 'Read-only' : 'Member' }} · {{ bot.active ? 'Active' : 'Disabled' }}</small></span><span class="bot-badge">Bot</span></button></nav>
+          <section class="bot-card"><h2>Create a bot</h2><form @submit.prevent="create"><label>Bot name<InputText v-model="createName" required maxlength="200" placeholder="e.g. AI assistant" :disabled="busy" /></label><label>Account permissions<PSelect v-model="createRole" :options="[{ label: 'Read-only', value: 'reader' }, { label: 'Member — read and write', value: 'member' }]" option-label="label" option-value="value" aria-label="Account permissions" :disabled="busy" /></label><PButton type="submit" :disabled="busy">Create bot</PButton></form></section>
+          <nav aria-label="Bot accounts"><p v-if="loading" class="hint">Loading bots…</p><PButton v-for="bot in bots" :key="bot.id" type="button" severity="secondary" outlined :aria-pressed="selectedId === bot.id" :disabled="busy" @click="selectedId = bot.id"><UserAvatar :name="bot.name" :src="bot.avatar_url" /><span class="bot-identity">{{ bot.name }}<small>{{ bot.role === 'reader' ? 'Read-only' : 'Member' }} · {{ bot.active ? 'Active' : 'Disabled' }}</small></span><span class="bot-badge">Bot</span></PButton></nav>
         </aside>
         <div v-if="selected" class="bot-details">
           <section class="bot-card bot-picture-card" aria-labelledby="bot-picture-heading">
             <h2 id="bot-picture-heading">Bot picture</h2>
             <div class="bot-picture-row">
               <UserAvatar class="bot-picture" :name="selected.name" :src="selected.avatar_url" />
-              <div><div class="bot-actions"><button type="button" :disabled="busy" @click="avatarInput?.click()">Upload picture</button><button v-if="selected.avatar_url" type="button" :disabled="busy" @click="removeAvatar">Remove picture</button></div><p class="hint">PNG, JPEG, GIF or WebP · up to 5 MB. Cropped to a square and saved immediately.</p></div>
+              <div><div class="bot-actions"><PButton type="button" severity="secondary" outlined :disabled="busy" @click="avatarInput?.click()">Upload picture</PButton><PButton v-if="selected.avatar_url" type="button" severity="secondary" outlined :disabled="busy" @click="removeAvatar">Remove picture</PButton></div><p class="hint">PNG, JPEG, GIF or WebP · up to 5 MB. Cropped to a square and saved immediately.</p></div>
             </div>
             <input ref="avatarInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Bot picture" hidden :disabled="busy" @change="uploadAvatar" />
           </section>
-          <section class="bot-card"><header><h2>{{ selected.name }} <span class="bot-badge">Bot</span></h2><p>API access only. Bots have no password or OIDC login.</p></header><form @submit.prevent="update()"><label>Display name<input v-model="editName" required maxlength="200" :disabled="busy" /></label><label>Account permissions<select v-model="editRole" :disabled="busy"><option value="reader">Read-only</option><option value="member">Member — read and write</option></select></label><div class="bot-actions"><button class="primary" :disabled="busy">Save bot</button><button type="button" :disabled="busy" @click="update(!selected.active)">{{ selected.active ? 'Disable bot' : 'Enable bot' }}</button></div></form><p class="hint">Disabling a bot revokes all its tokens. Re-enabling requires a new token.</p></section>
-          <section class="bot-card"><header><h2>Project access</h2><p>Bots can access only explicitly assigned projects, including organization-visible projects.</p></header><form class="bot-project-form" @submit.prevent="grantProject"><label>Project<select v-model="projectId" required :disabled="busy"><option value="" disabled>Select a project</option><option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }} ({{ p.key }})</option></select></label><label>Project permission<select v-model="projectRole" :disabled="busy"><option value="reader">Read-only</option><option value="member" :disabled="selected.role === 'reader'">Read and write</option></select></label><button class="primary" :disabled="busy || !projectId">Grant / update access</button></form><ul class="bot-project-list"><li v-for="p in memberships" :key="p.project_id"><RouterLink :to="`/${p.slug}/`">{{ p.name }}</RouterLink><span>{{ p.effective_role === 'reader' ? 'Read-only' : 'Read and write' }}</span><button type="button" :disabled="busy" @click="removeProject(p.project_id)">Remove</button></li></ul><p v-if="!memberships.length" class="hint">No projects assigned. This bot cannot read or change tickets yet.</p></section>
+          <section class="bot-card"><header><h2>{{ selected.name }} <span class="bot-badge">Bot</span></h2><p>API access only. Bots have no password or OIDC login.</p></header><form @submit.prevent="update()"><label>Display name<InputText v-model="editName" required maxlength="200" :disabled="busy" /></label><label>Account permissions<PSelect v-model="editRole" :options="[{ label: 'Read-only', value: 'reader' }, { label: 'Member — read and write', value: 'member' }]" option-label="label" option-value="value" aria-label="Account permissions" :disabled="busy" /></label><div class="bot-actions"><PButton type="submit" :disabled="busy">Save bot</PButton><PButton type="button" severity="secondary" outlined :disabled="busy" @click="update(!selected.active)">{{ selected.active ? 'Disable bot' : 'Enable bot' }}</PButton></div></form><p class="hint">Disabling a bot revokes all its tokens. Re-enabling requires a new token.</p></section>
+          <section class="bot-card"><header><h2>Project access</h2><p>Bots can access only explicitly assigned projects, including organization-visible projects.</p></header><form class="bot-project-form" @submit.prevent="grantProject"><label>Project<PSelect v-model="projectId" :options="projects.map(p => ({ value: p.id, label: `${p.name} (${p.key})` }))" option-label="label" option-value="value" filter placeholder="Select a project" aria-label="Project" :disabled="busy" /></label><label>Project permission<PSelect v-model="projectRole" :options="[{ label: 'Read-only', value: 'reader' }, { label: 'Read and write', value: 'member', disabled: selected.role === 'reader' }]" option-label="label" option-value="value" option-disabled="disabled" aria-label="Project permission" :disabled="busy" /></label><PButton type="submit" :disabled="busy || !projectId">Grant / update access</PButton></form><ul class="bot-project-list"><li v-for="p in memberships" :key="p.project_id"><RouterLink :to="`/${p.slug}/`">{{ p.name }}</RouterLink><span>{{ p.effective_role === 'reader' ? 'Read-only' : 'Read and write' }}</span><PButton type="button" severity="secondary" outlined :disabled="busy" @click="removeProject(p.project_id)">Remove</PButton></li></ul><p v-if="!memberships.length" class="hint">No projects assigned. This bot cannot read or change tickets yet.</p></section>
           <TokenManager :key="selected.id + ':' + selected.active" :base-path="`/bots/${selected.id}/tokens`" :owner-role="selected.role" :disabled="!selected.active" title="Bot API tokens" />
         </div>
         <section v-else class="empty-state"><h2>Select or create a bot</h2><p>Each bot gets its own tokens and activity attribution.</p></section>
       </div>
     </template>
-  </main>
+  </component>
 </template>
 
 <style scoped>
 .bots-page { max-width: 1250px; margin: 0 auto; padding: 30px 35px 50px; }
+.bots-page.bots-embedded { max-width: none; padding: 0; }
 .bot-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); align-items: start; gap: 25px; }
 .bot-card { background: var(--surface); padding: 22px; border: 1px solid var(--border); border-radius: 9px; margin-bottom: 22px; }
 .bot-card header { border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px; }

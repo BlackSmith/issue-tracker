@@ -3,7 +3,7 @@ export interface User {
   avatar_url: string | null; theme_accent: string; theme_background: string
   is_bot: boolean
 }
-export interface Project { id: string; key: string; slug: string; name: string; description: string; visibility: string; can_write: boolean }
+export interface Project { id: string; key: string; slug: string; name: string; description: string; visibility: string; can_write: boolean; can_manage: boolean }
 export interface Assignee { id: string; name: string; avatar_url: string | null; is_bot: boolean }
 export interface LabelDefinition { id: string; project_id: string | null; name: string; color: string; description: string }
 export interface WorkItem {
