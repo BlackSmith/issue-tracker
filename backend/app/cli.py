@@ -13,7 +13,7 @@ def main():
     parser.add_argument("--subject", required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--email", required=True)
-    parser.add_argument("--role", choices=["administrator", "member", "reader"], default="member")
+    parser.add_argument("--role", choices=["administrator", "member"], default="member")
     args = parser.parse_args()
     with SessionLocal() as db:
         if args.command == "bootstrap-admin" and db.scalar(select(func.count()).select_from(User).where(User.role == "administrator")):

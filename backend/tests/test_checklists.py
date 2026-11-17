@@ -3,10 +3,13 @@ from sqlalchemy import select
 
 from app.checklists import checklist_items, content_version, set_checklist_item
 from app.models import Activity, Comment, ProjectMember
+from conftest import grant_project_access
 
 
 def setup_ticket(client, visibility="organization", description="- [ ] First task\n- [x] Second task"):
     project = client.post("/api/v1/projects", json={"key": "APP", "name": "Application", "visibility": visibility}).json()
+    if visibility == 'organization':
+        grant_project_access(client, project['id'])
     item = client.post(f"/api/v1/projects/{project['id']}/items", json={"title": "Checklist", "description": description}).json()
     return project, item
 
@@ -96,7 +99,7 @@ def test_project_reader_cannot_toggle_and_csrf_required(env):
     payload = {"checked": True, "version": item["description_version"]}
     path = f"/api/v1/items/{item['id']}/checklist/0"
     with factory() as db:
-        db.add(ProjectMember(project_id=project["id"], user_id=people["member"], role="reader"))
+        db.merge(ProjectMember(project_id=project["id"], user_id=people["member"], role="read-only"))
         db.commit()
     assert member.patch(path, json=payload).status_code == 403
     admin.headers.pop("X-CSRF-Token")

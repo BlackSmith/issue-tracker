@@ -67,7 +67,7 @@ def test_catalog_permissions_private_isolation_validation_and_csrf(env):
     for role in ["member", "reader"]:
         c = client(role)
         assert c.get(private_path).status_code == 404
-        assert c.get(path).json() == [org]
+        assert c.get(path).status_code == 403
         assert c.post(path, json={"name": "No", "color": "#123456"}).status_code == 403
         assert c.put(f'{path}/{org["id"]}', json={"name": "No", "color": "#123456"}).status_code == 403
         assert c.delete(f'{path}/{org["id"]}').status_code == 403

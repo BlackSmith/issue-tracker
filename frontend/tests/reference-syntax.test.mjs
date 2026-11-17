@@ -7,6 +7,7 @@ const id = '00000000-0000-0000-0000-000000000001'
 
 test('only same-origin ticket URLs are eligible for conversion', () => {
   assert.deepEqual(internalTicketTarget(`${origin}/product/123?view=panel#activity`, origin), { slug: 'product', number: '123' })
+  assert.deepEqual(internalTicketTarget(`${origin}/APP/123?view=panel#activity`, origin), { slug: 'APP', number: '123' })
   assert.deepEqual(internalTicketTarget(`/items/${id}`, origin), { id })
   assert.deepEqual(internalTicketTarget(`${origin}/projects/${id}?item=${id}`, origin), { id, projectId: id })
   for (const url of ['https://tracker.example.attacker.test/product/1', 'https://other.example/product/1',

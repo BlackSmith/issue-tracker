@@ -1,9 +1,9 @@
 export interface User {
-  id: string; name: string; email: string; role: 'administrator' | 'member' | 'reader' | null
+  id: string; name: string; email: string; role: 'administrator' | 'member' | null
   avatar_url: string | null; theme_accent: string; theme_background: string
   is_bot: boolean
 }
-export interface Project { id: string; key: string; slug: string; name: string; description: string; visibility: string; can_write: boolean; can_manage: boolean }
+export interface Project { id: string; key: string; slug: string; legacy_slug?: string | null; name: string; description: string; visibility: string; can_write: boolean; can_manage: boolean }
 export interface Assignee { id: string; name: string; avatar_url: string | null; is_bot: boolean }
 export interface LabelDefinition { id: string; project_id: string | null; name: string; color: string; description: string }
 export interface WorkItem {
@@ -19,7 +19,7 @@ export interface ApiToken {
   status: 'active' | 'expired' | 'revoked'; created_at: string; expires_at: string
   revoked_at: string | null; last_used_at: string | null
 }
-export interface BotAccount { id: string; name: string; role: 'reader' | 'member'; active: boolean; is_bot: true; avatar_url: string | null }
+export interface BotAccount { id: string; name: string; role: 'member'; active: boolean; is_bot: true; avatar_url: string | null }
 export interface BotProject { project_id: string; name: string; key: string; slug: string; role: string; effective_role: string }
 export interface Attachment { id: string; filename: string; size: number; url: string }
 export const statuses = ['Open', 'In progress', 'Done', 'Canceled']

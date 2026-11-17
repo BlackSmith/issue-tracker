@@ -19,7 +19,7 @@ account's membership, role, or project access also affect existing tokens.
 An organization administrator opens **Bots** and:
 
 1. Creates a named bot, for example `AI issue assistant`.
-2. Chooses a reader or member account role. Bots cannot be administrators.
+2. Assigns Reporter or Read-only access per project. Bots are application members and cannot be project owners or application admins.
 3. Grants explicit project access, read-only or read/write.
 4. Creates a named bot token with the needed scope and expiration.
 

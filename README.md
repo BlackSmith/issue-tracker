@@ -12,13 +12,14 @@ Built with FastAPI, PostgreSQL, Vue 3, and PrimeVue 4. The interface and API use
   CSRF protection, state, nonce, and S256 PKCE.
 - Stable internal accounts and separate issuer/subject identities. Matching email
   addresses never merge accounts or confer organization membership.
-- Organization administrator, member, and reader roles; organization-visible and
-  private projects. Project roles are Admin, Member, and Reader: Admin manages
-  project settings, memberships, and project labels; Member contributes to work
-  items without configuring the project; Reader has read-only access. Organization
-  administrators retain full access. Bots and organization readers cannot become
-  project administrators. A newly created project automatically includes its creator
-  as an explicit Admin member.
+- Application roles are Admin (API `administrator`) and Member (`member`). Only
+  Admin can create projects and manage users, bots, and organization labels.
+  Project roles are Owner (`owner`), Reporter (`reporter`), and Read-only (`read-only`).
+  Owner manages settings, members, and local labels; Reporter contributes to work
+  items and comments; Read-only can browse tickets. Members see only explicitly
+  assigned projects. Application admins are permanent owners of every project,
+  including projects without an explicit membership row. They cannot be removed
+  or demoted through project membership APIs. Creators receive an explicit Owner row.
 - Personal settings for display name, contact email, profile picture, interface
   accent color, and application background. Green is the default accent.
 - Project-scoped work item numbers, visually edited descriptions, types, fixed statuses,
@@ -28,10 +29,14 @@ Built with FastAPI, PostgreSQL, Vue 3, and PrimeVue 4. The interface and API use
 - Explicit organization and project label definitions with names, colors, and
   descriptions; projects automatically inherit all organization labels. Ticket
   creation, editing, and filtering use existing definitions.
-- Search, multi-status/multi-label filtering, sorting, pagination, and shareable
-  filter URLs. Project lists default to Open and In progress, hiding Done and Canceled.
-  Selected statuses match any selected status; selected labels match any selected label.
-  Status and label filters are combined. Reset filters restores the default view.
+- GitLab-style search bar with editable/removable filter tokens for status, labels,
+  assignee (including Me and Unassigned), priority, and type. Text searches titles
+  and descriptions. Multiple values within a filter match any selection; different
+  filters are combined. Filter menus support Arrow Up/Down, Enter, and Escape.
+  Updated date, created date, title, priority, and due date sorting support both
+  directions; items without a due date remain last. Pagination and all filters/sort
+  state use shareable URLs. Project lists default to Open and In progress, hiding
+  Done and Canceled. Reset filters restores that default view while retaining sorting.
 - Side-panel and standalone work item creation and detail, with draft-preserving
   switching between creation presentations and list filters preserved on return.
 - Readable project URLs such as `/product-development/` and ticket URLs using
@@ -117,30 +122,48 @@ identities explicitly:
 .venv/bin/python -m app.cli provision-user \
   --issuer http://host.docker.internal:5152/realms/issue-tracker \
   --subject 00000000-0000-0000-0000-000000000003 \
-  --name 'Development Reader' --email reader@example.test --role reader
+  --name 'Development Reader' --email reader@example.test --role member
 ```
 
 `provision-user` also updates the role of an existing issuer/subject identity.
 It does not match accounts by email. For an already signed-in pending account,
 use the same verified issuer and subject to grant membership to that account.
-Project access can then be set with the **Members** button by an administrator.
-A global reader cannot gain write access through a project role.
+Project access can then be assigned in **Project settings → Members** by an
+application admin or project owner. The mock identity named Reader is an application
+Member; assign it Read-only separately in each desired project.
+
+Migration `0009` maps project `administrator/member/reader` to
+`owner/reporter/read-only` and application `reader` to `member`, preserving the
+former read-only ceiling on existing assignments. It does not grant replacement
+memberships for previously implicit access. The legacy API `visibility` field is
+retained as metadata for compatibility; neither value grants access without membership.
+The downgrade restores project role names but cannot infer former application readers.
 
 ### Application settings and users
 
-Application administrators open **Settings** directly in the left sidebar. The
+Application administrators open **Organization settings** at the bottom of the left sidebar. The
 application settings page at `/admin/settings` has **Organization**, **Users**, and
 **Bots** tabs. Users and Bots are directly linkable with `?tab=users` and `?tab=bots`.
 Existing `/admin/organization` and `/admin/bots` links redirect to the corresponding
-tab. Project Admin does not grant access to application settings.
+tab. Project Owner does not grant access to application settings.
 
 The Users tab lists all human accounts, including inactive accounts and accounts
-awaiting membership, with name, email, application role (**Admin** or **User**),
+awaiting membership, with name, email, application role (**Admin** or **Member**),
 last successful browser sign-in, and account status. It supports search, sorting,
 and pagination. Bots remain in their dedicated tab. Last sign-in is recorded on
 successful OIDC authentication, not API requests or token usage. Older accounts
 show **Not recorded** until their next sign-in; no historical times are inferred.
-The administrator-only integration endpoint is `GET /api/v1/admin/users`.
+The administrator-only endpoints are `GET /api/v1/admin/users` and
+`PUT /api/v1/admin/users/{id}` with `role` and `active`. At least one active
+application admin must remain.
+
+Settings lists remain visible while label creation/editing, user details, and bot
+management open in a right-hand panel, matching ticket details. User details allow
+admins to change application roles and enable/disable accounts. Panels reserve half the viewport on large screens and fill the content
+width on smaller screens. The `detail` query parameter preserves the open record
+across reloads and browser history; `detail=new` opens label or bot creation.
+Closing a panel returns to its list, retaining the current search and page during
+the mounted session. Project label editors inside project settings remain inline.
 
 ### Label management
 
@@ -220,6 +243,27 @@ The API resolves a readable link with
 `GET /api/v1/projects/by-slug/<slug>/items/<number>` and checks project permissions.
 Existing UUID-based API endpoints remain available.
 
+### Work item filtering and sorting API
+
+`GET /api/v1/projects/{project_id}/items` accepts `q` (title/description search),
+repeated `status`, `label`, `priority`, `type`, and `assignee` parameters. Assignee
+values are user UUIDs, `me` (the current authenticated user), or `none` (unassigned).
+Values within each dimension use OR; dimensions combine with AND. Omitting a filter
+means no restriction in the API. The browser applies its Open + In progress default
+separately and preserves explicit all-status selection as `?status=` in browser URLs.
+
+`sort` accepts `updated`, `created`, `title`, `priority`, or `due_date`; optional
+`direction` accepts `asc` or `desc`. Without direction, title/due date default to
+ascending and other fields to descending, preserving existing API behavior.
+Priority sorts by Low, Medium, High, Urgent; due dates always put nulls last.
+An ID tie-breaker keeps pagination deterministic for equal sort values.
+
+`GET /api/v1/projects/{project_id}/item-assignees` supplies people currently assigned
+to work items in that project, including historical assignees who can no longer
+receive new assignments. It requires project read access and exposes the same
+basic assignee representation as work items, without email addresses. It is separate
+from the write-protected `/assignees` endpoint used to select new assignments.
+
 ### Personal settings
 
 Open **Personal settings** using the profile/gear link in the top-right corner,
@@ -252,12 +296,12 @@ expiration (30 days by default, up to one year), revocation, and last-used metad
 Copy the full secret when it is created; later listings expose only its prefix
 and metadata. The database stores only a SHA-256 hash of the random secret.
 
-Administrators can open **Bots** in the header or **Manage bot accounts** in
-settings. Bots have their own name, reader/member role, and API tokens, with no
-password or OIDC/browser login. Explicitly assign projects before using a bot:
-organization-visible projects are not granted automatically. Tokens and project
-permissions are both enforced, so a bot needs a write-capable account, project
-membership, and token to make changes. Bot comments and activity display a **Bot**
+Application admins open **Organization settings → Bots**. Bots are application
+members with their own name and API tokens, with no password or OIDC/browser login.
+Only application admins manage bots and their project access. Assign Reporter or
+Read-only per project; bots cannot be owners. Tokens and project permissions are
+both enforced, so a bot needs Reporter membership and a write-scoped token to make
+changes. Bot comments and activity display a **Bot**
 badge. Disabling a bot revokes all its tokens; re-enabling does not restore them.
 
 Use `Authorization: Bearer <token>` for API requests. Browser cookies and CSRF

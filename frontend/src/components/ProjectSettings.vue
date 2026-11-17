@@ -36,8 +36,7 @@ async function save() {
       <form @submit.prevent="save">
         <label>Project name<InputText v-model="form.name" required maxlength="150" :disabled="busy" /></label>
         <label>Description<PTextarea v-model="form.description" rows="4" maxlength="10000" :disabled="busy" /></label>
-        <label>Visibility<SelectButton v-model="form.visibility" :options="[{ label: 'Organization', value: 'organization' }, { label: 'Private', value: 'private' }]" option-label="label" option-value="value" :allow-empty="false" aria-label="Visibility" :disabled="busy" /><small>Organization: visible to all organization members. Private: project members only.</small></label>
-        <p class="hint">Private projects are accessible only to explicit project members and organization administrators. Bots always require explicit membership.</p>
+        <p class="hint">Only assigned project members and application admins can access this project.</p>
         <div class="form-grid"><label>Project key<InputText :model-value="project.key" readonly /></label><label>Project URL<InputText :model-value="`/${project.slug}/`" readonly /></label></div>
         <p class="hint">The project key and URL stay stable when you rename the project.</p>
         <PMessage v-if="error" severity="error">{{ error }}</PMessage><PMessage v-if="message" severity="success">{{ message }}</PMessage>

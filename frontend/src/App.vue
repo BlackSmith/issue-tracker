@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { api, auth, refreshAuth } from './api'
+import { api, auth, refreshAuth, signOut } from './api'
 import UserAvatar from './components/UserAvatar.vue'
 
 const error = ref('')
+const signingOut = ref(false)
 const providers = ref<{ id: string; name: string; url: string }[]>([])
 onMounted(async () => {
   try {
@@ -12,8 +13,11 @@ onMounted(async () => {
   } catch (e) { error.value = (e as Error).message }
 })
 async function logout() {
-  try { await api('/auth/logout', { method: 'POST' }); await refreshAuth() }
+  if (signingOut.value) return
+  signingOut.value = true; error.value = ''
+  try { await signOut() }
   catch (e) { error.value = (e as Error).message }
+  finally { signingOut.value = false }
 }
 </script>
 
@@ -32,7 +36,7 @@ async function logout() {
     </div>
   </div>
   <div v-else-if="!auth.user.role && $route.path !== '/settings'" class="login-page">
-    <div class="login-card"><h1>You're signed in.</h1><p>Your account does not have organization membership yet. Ask an administrator to grant access.</p><RouterLink to="/settings" class="button">Personal settings</RouterLink> <PButton @click="logout">Sign out</PButton></div>
+    <div class="login-card"><h1>You're signed in.</h1><p>Your account does not have organization membership yet. Ask an administrator to grant access.</p><RouterLink to="/settings" class="button">Personal settings</RouterLink> <PButton :disabled="signingOut" :loading="signingOut" @click="logout">Sign out</PButton></div>
   </div>
   <div v-else class="app-shell">
     <header class="topbar">
@@ -44,9 +48,9 @@ async function logout() {
           <span class="account-name">{{ auth.user.name }}<small>{{ auth.user.role || 'Pending membership' }}</small></span>
           <span class="settings-icon" aria-hidden="true">⚙</span>
         </RouterLink>
-        <PButton class="quiet on-dark" @click="logout">Sign out</PButton>
+        <PButton class="quiet on-dark" :disabled="signingOut" :loading="signingOut" @click="logout">Sign out</PButton>
       </div>
     </header>
-    <RouterView />
+    <RouterView :key="auth.user.id" />
   </div>
 </template>

@@ -6,12 +6,13 @@ import secrets
 from contextlib import asynccontextmanager, suppress
 from datetime import timezone
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import Field
-from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy import and_, case, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -24,11 +25,10 @@ from app.models import (Activity, Attachment, Comment, ExternalIdentity, Project
                         ProjectMember, User, WorkItem, Label, new_id, utcnow)
 from app.providers import OIDCProvider
 from app.profiles import avatar_url, profile_json, router as profile_router
-from app.project_slugs import project_slug_base
 from app.references import router as references_router
 from app.tokens import router as tokens_router
 from app.bots import router as bots_router
-from app.schemas import ChecklistUpdate, CommentCreate, ItemCreate, ItemUpdate, LabelCreate, MemberCreate, ProjectCreate, ProjectUpdate, Status
+from app.schemas import ApplicationUserUpdate, ChecklistUpdate, CommentCreate, ItemCreate, ItemUpdate, ItemType, LabelCreate, MemberCreate, Priority, ProjectCreate, ProjectUpdate, Status
 from app.security import ServerSessionMiddleware, browser_user, csrf, maybe_user, organization_user
 
 settings = get_settings()
@@ -58,21 +58,19 @@ api = "/api/v1"
 
 def can_manage_project(user, member):
     return not user.is_bot and (user.role == "administrator" or (
-        user.role == "member" and member is not None and member.role == "administrator"))
+        user.role == "member" and member is not None and member.role == "owner"))
 
 
 def project_access(db: Session, project_id: str, user: User, write=False, manage=False) -> Project:
     project = db.get(Project, project_id)
     member = db.get(ProjectMember, (project_id, user.id))
-    if user.is_bot and not member:
+    if not project or ((user.role != "administrator" or user.is_bot) and not member):
         raise HTTPException(404, "Project not found")
-    if not project or (user.role != "administrator" and project.visibility == "private" and not member):
-        raise HTTPException(404, "Project not found")
-    effective = member.role if member else user.role
-    if write and (user.role != "administrator" or user.is_bot) and (user.role == "reader" or effective == "reader"):
+    effective = "owner" if user.role == "administrator" and not user.is_bot else member.role
+    if write and effective not in {"owner", "reporter"}:
         raise HTTPException(403, "Read-only access")
     if manage and not can_manage_project(user, member):
-        raise HTTPException(403, "Project administrator required")
+        raise HTTPException(403, "Project owner required")
     return project
 
 
@@ -86,15 +84,15 @@ def item_access(db, item_id, user, write=False):
 
 def project_json(project, user, db):
     member = db.get(ProjectMember, (project.id, user.id))
-    can_write = (user.role == "administrator" and not user.is_bot) or (user.role == "member" and (not member or member.role != "reader"))
-    return {"id": project.id, "key": project.key, "slug": project.slug, "name": project.name,
+    can_write = (user.role == "administrator" and not user.is_bot) or (member is not None and member.role in {"owner", "reporter"})
+    return {"id": project.id, "key": project.key, "slug": project.key, "legacy_slug": project.slug if project.slug != project.key else None, "name": project.name,
             "description": project.description, "visibility": project.visibility, "can_write": can_write,
             "can_manage": can_manage_project(user, member)}
 
 
 def item_json(item, project):
-    return {"id": item.id, "project_id": item.project_id, "project_slug": project.slug,
-            "number": item.number, "web_url": f"/{project.slug}/{item.number}", "reference": f"{project.key}-{item.number}",
+    return {"id": item.id, "project_id": item.project_id, "project_slug": project.key,
+            "number": item.number, "web_url": f"/{project.key}/{item.number}", "reference": f"{project.key}-{item.number}",
              "description_version": content_version(item.description),
             "assignee_id": item.assignee_id, "assignee": assignee_json(item.assignee) if item.assignee else None,
              **{key: getattr(item, key) for key in ("title", "description", "type", "status", "priority", "labels", "due_date", "created_at", "updated_at")}}
@@ -109,9 +107,7 @@ def assignable_users(project):
                                                       ProjectMember.project_id == project.id))
             .where(User.active.is_(True), User.role.in_(["administrator", "member"]),
                    or_(and_(User.role == "administrator", User.is_bot.is_(False)),
-                       ProjectMember.role.in_(["administrator", "member"]),
-                       and_(ProjectMember.user_id.is_(None), User.is_bot.is_(False),
-                            project.visibility == "organization"))))
+                        ProjectMember.role.in_(["owner", "reporter"]))))
 
 
 def resolve_assignee(db, project, user_id):
@@ -196,11 +192,8 @@ def logout(request: Request, user: User = Depends(browser_user)):
 @app.get(api + "/projects", tags=["Projects"])
 def projects(user: User = Depends(organization_user), db: Session = Depends(get_db)):
     query = select(Project).order_by(Project.name)
-    if user.is_bot:
+    if user.is_bot or user.role != "administrator":
         query = query.where(exists().where(ProjectMember.project_id == Project.id, ProjectMember.user_id == user.id))
-    elif user.role != "administrator":
-        query = query.where(or_(Project.visibility == "organization", exists().where(
-            ProjectMember.project_id == Project.id, ProjectMember.user_id == user.id)))
     return [project_json(p, user, db) for p in db.scalars(query)]
 
 
@@ -208,20 +201,11 @@ def projects(user: User = Depends(organization_user), db: Session = Depends(get_
 def create_project(payload: ProjectCreate, user: User = Depends(organization_user), db: Session = Depends(get_db)):
     if user.role != "administrator":
         raise HTTPException(403, "Administrator required")
-    slug = payload.slug
-    if slug is None:
-        base = project_slug_base(payload.name)
-        slug = base
-        suffix = 2
-        while db.scalar(select(Project.id).where(Project.slug == slug)):
-            ending = f"-{suffix}"
-            slug = base[:100 - len(ending)].rstrip("-") + ending
-            suffix += 1
-    project = Project(**payload.model_dump(exclude={"slug"}), slug=slug)
+    project = Project(**payload.model_dump(exclude={"slug"}), slug=payload.key)
     db.add(project)
     try:
         db.flush()
-        db.add(ProjectMember(project_id=project.id, user_id=user.id, role="administrator"))
+        db.add(ProjectMember(project_id=project.id, user_id=user.id, role="owner"))
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -261,11 +245,34 @@ def application_users(user: User = Depends(organization_user), db: Session = Dep
 @app.get(api + "/projects/{project_id}/members", tags=["Projects"])
 def project_members(project_id: str, user: User = Depends(organization_user), db: Session = Depends(get_db)):
     project_access(db, project_id, user, manage=True)
-    rows = db.execute(select(ProjectMember, User).join(User, User.id == ProjectMember.user_id)
-                      .where(ProjectMember.project_id == project_id).order_by(User.name, User.id))
+    rows = db.execute(select(ProjectMember, User).select_from(User).outerjoin(ProjectMember, and_(
+        User.id == ProjectMember.user_id, ProjectMember.project_id == project_id))
+        .where(or_(ProjectMember.user_id.is_not(None), and_(User.role == "administrator", User.is_bot.is_(False))))
+        .order_by(User.name, User.id))
     return [{"user_id": target.id, "name": target.name, "email": target.email, "avatar_url": avatar_url(target),
-             "role": member.role, "organization_role": target.role,
-              "active": target.active, "is_bot": target.is_bot} for member, target in rows]
+             "role": "owner" if target.role == "administrator" and not target.is_bot else member.role,
+             "inherited": target.role == "administrator" and not target.is_bot, "organization_role": target.role,
+               "active": target.active, "is_bot": target.is_bot} for member, target in rows]
+
+
+@app.put(api + "/admin/users/{user_id}", dependencies=[Depends(csrf)], tags=["Application settings"])
+def update_application_user(user_id: str, payload: ApplicationUserUpdate,
+                            user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    if user.role != "administrator" or user.is_bot:
+        raise HTTPException(403, "Application administrator required")
+    # Serialize administrator changes to preserve at least one active admin.
+    db.scalars(select(User).where(User.role == "administrator").order_by(User.id).with_for_update()).all()
+    target = db.get(User, user_id)
+    if not target or target.is_bot:
+        raise HTTPException(404, "User not found")
+    if target.role == "administrator" and target.active and (payload.role != "administrator" or not payload.active):
+        others = db.scalar(select(func.count()).select_from(User).where(
+            User.role == "administrator", User.active.is_(True), User.is_bot.is_(False), User.id != target.id))
+        if not others:
+            raise HTTPException(409, "At least one active application administrator is required")
+    target.role, target.active = payload.role, payload.active
+    db.commit()
+    return {"ok": True}
 
 
 @app.get(api + "/projects/{project_id}/assignees", tags=["Work items"])
@@ -277,6 +284,11 @@ def project_assignees(project_id: str, user: User = Depends(organization_user), 
 @app.delete(api + "/projects/{project_id}/members/{user_id}", dependencies=[Depends(csrf)], tags=["Projects"])
 def remove_member(project_id: str, user_id: str, user: User = Depends(organization_user), db: Session = Depends(get_db)):
     project_access(db, project_id, user, manage=True)
+    target = db.get(User, user_id)
+    if target and target.role == "administrator" and not target.is_bot:
+        raise HTTPException(403, "Application administrators are permanent project owners")
+    if target and target.is_bot and user.role != "administrator":
+        raise HTTPException(403, "Bot access is managed by application administrators")
     member = db.get(ProjectMember, (project_id, user_id))
     if not member:
         raise HTTPException(404, "Project member not found")
@@ -291,10 +303,10 @@ def set_member(project_id: str, payload: MemberCreate, user: User = Depends(orga
     target = db.get(User, payload.user_id)
     if not target or not target.active or not target.role:
         raise HTTPException(404, "Organization member not found")
-    if target.is_bot and (payload.role == "administrator" or (target.role == "reader" and payload.role == "member")):
-        raise HTTPException(403, "Bot project access cannot exceed its account role")
-    if payload.role == "administrator" and target.role == "reader":
-        raise HTTPException(403, "Project administration requires organization member permissions")
+    if target.role == "administrator" and not target.is_bot:
+        raise HTTPException(403, "Application administrators are permanent project owners")
+    if target.is_bot and (not user.role == "administrator" or payload.role == "owner"):
+        raise HTTPException(403, "Bot access is managed by application administrators; bots cannot be owners")
     db.merge(ProjectMember(project_id=project_id, **payload.model_dump()))
     db.commit()
     return {"ok": True}
@@ -309,6 +321,8 @@ def label_scope(db, user, project_id=None, write=False):
 
 @app.get(api + "/organization/labels", tags=["Labels"])
 def organization_labels(user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    if user.role != "administrator":
+        raise HTTPException(403, "Application administrator required")
     return [label_json(label) for label in db.scalars(select(Label).where(Label.project_id.is_(None)).order_by(Label.name))]
 
 
@@ -381,10 +395,22 @@ def delete_label(label_id: str, project_id: str | None = None, user: User = Depe
     return {"ok": True}
 
 
+@app.get(api + "/projects/{project_id}/item-assignees", tags=["Work items"])
+def item_assignees(project_id: str, user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    project_access(db, project_id, user)
+    assigned = select(WorkItem.assignee_id).where(WorkItem.project_id == project_id)
+    return [assignee_json(person) for person in db.scalars(
+        select(User).where(User.id.in_(assigned)).order_by(User.name, User.id))]
+
+
 @app.get(api + "/projects/{project_id}/items", tags=["Work items"])
 def items(project_id: str, q: str = Query("", max_length=200), status: list[Status] | None = Query(None, max_length=100),
           label: list[Annotated[str, Field(max_length=50)]] | None = Query(None, max_length=100),
-          sort: str = Query("updated", pattern="^(updated|created|title)$"),
+          priority: list[Priority] | None = Query(None, max_length=100),
+          type: list[ItemType] | None = Query(None, max_length=100),
+          assignee: list[UUID | Literal["me", "none"]] | None = Query(None, max_length=100),
+          sort: str = Query("updated", pattern="^(updated|created|title|priority|due_date)$"),
+          direction: Literal["asc", "desc"] | None = Query(None),
           page: int = Query(1, ge=1), per_page: int = Query(25, ge=1, le=100),
           user: User = Depends(organization_user), db: Session = Depends(get_db)):
     project = project_access(db, project_id, user)
@@ -394,13 +420,27 @@ def items(project_id: str, q: str = Query("", max_length=200), status: list[Stat
         query = query.where(or_(WorkItem.title.ilike(f"%{escaped}%", escape="\\"), WorkItem.description.ilike(f"%{escaped}%", escape="\\")))
     if status:
         query = query.where(WorkItem.status.in_(status))
+    if priority:
+        query = query.where(WorkItem.priority.in_(priority))
+    if type:
+        query = query.where(WorkItem.type.in_(type))
+    if assignee:
+        ids = [user.id if value == "me" else str(value) for value in assignee if value != "none"]
+        conditions = [WorkItem.assignee_id.in_(ids)] if ids else []
+        if "none" in assignee:
+            conditions.append(WorkItem.assignee_id.is_(None))
+        query = query.where(or_(*conditions))
     if label:
         # Match any selected label without duplicating items in counts/pagination.
         from sqlalchemy import cast
         from sqlalchemy.dialects.postgresql import JSONB
         query = query.where(or_(*(cast(WorkItem.labels, JSONB).contains([name]) for name in set(label))))
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    order = {"updated": WorkItem.updated_at.desc(), "created": WorkItem.created_at.desc(), "title": WorkItem.title.asc()}[sort]
+    column = {"updated": WorkItem.updated_at, "created": WorkItem.created_at, "title": WorkItem.title,
+              "priority": case({"Low": 0, "Medium": 1, "High": 2, "Urgent": 3}, value=WorkItem.priority),
+              "due_date": WorkItem.due_date}[sort]
+    direction = direction or ("asc" if sort in {"title", "due_date"} else "desc")
+    order = (column.asc() if direction == "asc" else column.desc()).nulls_last()
     rows = db.scalars(query.order_by(order, WorkItem.id).offset((page - 1) * per_page).limit(per_page))
     return {"items": [item_json(i, project) for i in rows], "total": total, "page": page, "per_page": per_page}
 
@@ -429,7 +469,9 @@ def get_item(item_id: str, user: User = Depends(organization_user), db: Session 
 
 @app.get(api + "/projects/by-slug/{project_slug}/items/{number}", tags=["Work items"])
 def get_item_by_number(project_slug: str, number: int, user: User = Depends(organization_user), db: Session = Depends(get_db)):
-    project = db.scalar(select(Project).where(Project.slug == project_slug))
+    project = db.scalar(select(Project).where(Project.key == project_slug))
+    if not project:
+        project = db.scalar(select(Project).where(Project.slug == project_slug))
     if not project:
         raise HTTPException(404, "Work item not found")
     try:

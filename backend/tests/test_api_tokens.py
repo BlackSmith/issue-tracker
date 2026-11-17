@@ -6,9 +6,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.main import app
-from app.models import ApiToken, BrowserSession, ExternalIdentity, User
+from app.models import ApiToken, BrowserSession, ExternalIdentity, ProjectMember, User
 from app.providers import ExternalProfile
 from app.security import token_hash
+from conftest import grant_project_access
 
 
 def issue(client, scopes=None, path="/api/v1/tokens"):
@@ -24,6 +25,8 @@ def bearer(secret):
 def project(admin, key="APP", visibility="organization"):
     response = admin.post("/api/v1/projects", json={"key": key, "name": key, "visibility": visibility})
     assert response.status_code == 201
+    if visibility == 'organization':
+        grant_project_access(admin, response.json()['id'])
     return response.json()
 
 
@@ -140,9 +143,10 @@ def test_tokens_never_exceed_current_owner_permissions(env):
     api = bearer(created["token"])
     assert api.get(f"/api/v1/items/{hidden['id']}").status_code == 404
     assert api.post("/api/v1/references/resolve", json={"tickets": [hidden["id"]]}).json()["tickets"] == []
-    assert reader.post("/api/v1/tokens", json={"name": "No write", "scopes": ["write"]}).status_code == 403
+    reader_api = bearer(issue(reader, ['write'])['token'])
+    assert reader_api.post(f"/api/v1/items/{visible['id']}/comments", json={'body': 'No write'}).status_code == 403
     with factory() as db:
-        db.get(User, people["member"]).role = "reader"
+        db.get(ProjectMember, (public['id'], people["member"])).role = "read-only"
         db.commit()
     assert api.post(f"/api/v1/items/{visible['id']}/comments", json={"body": "Role downgraded"}).status_code == 403
     with factory() as db:
@@ -182,7 +186,7 @@ def test_bot_requires_explicit_project_access_and_records_bot_actor(env):
     api = bearer(created["token"])
     assert api.get("/api/v1/projects").json() == []
     assert api.get(f"/api/v1/items/{i['id']}").status_code == 404
-    assert admin.put(f"/api/v1/bots/{account['id']}/projects/{p['id']}", json={"role": "member"}).status_code == 200
+    assert admin.put(f"/api/v1/bots/{account['id']}/projects/{p['id']}", json={"role": "reporter"}).status_code == 200
     assert [row["id"] for row in api.get("/api/v1/projects").json()] == [p["id"]]
     assert api.get(f"/api/v1/projects/{other['id']}/items").status_code == 404
     assert len(api.get("/api/v1/references/tickets").json()) == 1
@@ -207,12 +211,11 @@ def test_bot_read_only_ceiling_disable_and_reenable_do_not_restore_old_tokens(en
     account = bot(admin)
     created = issue(admin, ["write"], f"/api/v1/bots/{account['id']}/tokens")
     api = bearer(created["token"])
-    admin.put(f"/api/v1/bots/{account['id']}/projects/{p['id']}", json={"role": "member"})
-    edit = {"name": account["name"], "role": "reader", "active": True}
+    admin.put(f"/api/v1/bots/{account['id']}/projects/{p['id']}", json={"role": "read-only"})
+    edit = {"name": account["name"], "role": "member", "active": True}
     assert admin.put(f"/api/v1/bots/{account['id']}", json=edit).status_code == 200
     assert api.get(f"/api/v1/items/{i['id']}").status_code == 200
     assert api.post(f"/api/v1/items/{i['id']}/comments", json={"body": "No write"}).status_code == 403
-    assert admin.post(f"/api/v1/bots/{account['id']}/tokens", json={"name": "No write", "scopes": ["write"]}).status_code == 403
     assert admin.put(f"/api/v1/bots/{account['id']}", json={**edit, "active": False}).status_code == 200
     assert api.get("/api/v1/projects").status_code == 401
     assert admin.get(f"/api/v1/bots/{account['id']}/tokens").json()[0]["status"] == "revoked"

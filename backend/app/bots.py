@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/v1/bots", tags=["Bot accounts"])
 class BotCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=200)
-    role: Literal["reader", "member"] = "reader"
+    role: Literal["member"] = "member"
 
     @field_validator("name")
     @classmethod
@@ -34,7 +34,7 @@ class BotUpdate(BotCreate):
 
 class BotProjectAccess(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    role: Literal["reader", "member"]
+    role: Literal["read-only", "reporter"]
 
 
 def bot_json(bot: User):
@@ -97,8 +97,8 @@ def delete_bot_avatar(bot_id: str, user: User = Depends(browser_administrator), 
 def bot_projects(bot_id: str, user: User = Depends(browser_administrator), db: Session = Depends(get_db)):
     bot = get_bot(db, bot_id)
     rows = db.execute(select(Project, ProjectMember).join(ProjectMember).where(ProjectMember.user_id == bot.id).order_by(Project.name))
-    return [{"project_id": project.id, "name": project.name, "key": project.key, "slug": project.slug,
-             "role": member.role, "effective_role": "reader" if bot.role == "reader" else member.role}
+    return [{"project_id": project.id, "name": project.name, "key": project.key, "slug": project.key,
+             "role": member.role, "effective_role": member.role}
             for project, member in rows]
 
 
@@ -108,8 +108,6 @@ def grant_project(bot_id: str, project_id: str, payload: BotProjectAccess,
     bot = get_bot(db, bot_id)
     if not db.get(Project, project_id):
         raise HTTPException(404, "Project not found")
-    if bot.role == "reader" and payload.role == "member":
-        raise HTTPException(403, "A read-only bot cannot receive project write access")
     db.merge(ProjectMember(project_id=project_id, user_id=bot.id, role=payload.role))
     db.commit()
     return {"ok": True}

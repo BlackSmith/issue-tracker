@@ -55,8 +55,6 @@ def token_json(token: ApiToken):
 def create_token(db: Session, owner: User, issuer: User, payload: TokenCreate):
     if not owner.active or not owner.role:
         raise HTTPException(409, "The token owner must be an active organization member")
-    if owner.role == "reader" and "write" in payload.scopes:
-        raise HTTPException(403, "Read-only accounts can only create read tokens")
     secret = "itr_" + secrets.token_urlsafe(40)
     token = ApiToken(user_id=owner.id, created_by_id=issuer.id, name=payload.name,
                      scopes=payload.scopes, expires_at=int(payload.expires_at.timestamp()),

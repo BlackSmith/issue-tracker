@@ -41,7 +41,7 @@ def test_assignable_users_follow_current_roles_project_access_and_bot_membership
         db.add_all([inactive, bot])
         db.flush()
         inactive_id, bot_id = inactive.id, bot.id
-        db.add(ProjectMember(project_id=private_id, user_id=people["member"], role="member"))
+        db.add(ProjectMember(project_id=private_id, user_id=people["member"], role="reporter"))
         db.commit()
     public_path = f"/api/v1/projects/{public_id}/assignees"
     private_path = f"/api/v1/projects/{private_id}/assignees"
@@ -52,10 +52,10 @@ def test_assignable_users_follow_current_roles_project_access_and_bot_membership
     path = f"/api/v1/items/{item(admin, public_id)}"
     for target in (people["reader"], people["outsider"], inactive_id, bot_id, "missing"):
         assert member.patch(path, json={"assignee_id": target}).status_code == 422
-    assert admin.put(f"/api/v1/projects/{public_id}/members", json={"user_id": bot_id, "role": "member"}).status_code == 200
+    assert admin.put(f"/api/v1/projects/{public_id}/members", json={"user_id": bot_id, "role": "reporter"}).status_code == 200
     assert bot_id in {row["id"] for row in member.get(public_path).json()}
     assert member.patch(path, json={"assignee_id": bot_id}).json()["assignee"]["is_bot"] is True
-    assert admin.put(f"/api/v1/projects/{public_id}/members", json={"user_id": people["member"], "role": "reader"}).status_code == 200
+    assert admin.put(f"/api/v1/projects/{public_id}/members", json={"user_id": people["member"], "role": "read-only"}).status_code == 200
     assert people["member"] not in {row["id"] for row in admin.get(public_path).json()}
     assert admin.patch(path, json={"assignee_id": people["member"]}).status_code == 422
     assert admin.delete(f"/api/v1/projects/{private_id}/members/{people['member']}").status_code == 200
@@ -72,7 +72,7 @@ def test_assignee_creation_full_updates_and_later_role_changes(env):
     path = f"/api/v1/items/{created.json()['id']}"
     assert created.json()["assignee"]["id"] == people["member"]
     with factory() as db:
-        db.get(User, people["member"]).role = "reader"
+        db.get(ProjectMember, (pid, people["member"])).role = "read-only"
         db.commit()
     assert people["member"] not in {row["id"] for row in admin.get(f"/api/v1/projects/{pid}/assignees").json()}
     assert admin.patch(path, json={"priority": "High"}).json()["assignee_id"] == people["member"]

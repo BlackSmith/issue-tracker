@@ -5,7 +5,8 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, 
 from email_validator import EmailNotValidError, validate_email
 from app.project_slugs import RESERVED_PROJECT_SLUGS
 
-Role = Literal["administrator", "member", "reader"]
+Role = Literal["administrator", "member"]
+ProjectRole = Literal["owner", "reporter", "read-only"]
 Status = Literal["Open", "In progress", "Done", "Canceled"]
 Priority = Literal["Low", "Medium", "High", "Urgent"]
 ItemType = Literal["Task", "Bug", "Feature"]
@@ -48,16 +49,22 @@ class ProfileUpdate(BaseModel):
 class ProjectCreate(BaseModel):
     key: str = Field(pattern=r"^[A-Z][A-Z0-9]{1,9}$")
     name: str = Field(min_length=1, max_length=150)
-    slug: str | None = Field(default=None, min_length=1, max_length=100, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    slug: str | None = Field(default=None, description="Deprecated: the URL is derived from key. If supplied, must equal key.")
     description: str = Field(default="", max_length=10000)
-    visibility: Literal["organization", "private"] = "organization"
+    visibility: Literal["organization", "private"] = "private"
 
-    @field_validator("slug")
+    @field_validator("key")
     @classmethod
-    def slug_not_reserved(cls, value):
-        if value in RESERVED_PROJECT_SLUGS:
-            raise ValueError("This project slug is reserved")
+    def key_not_reserved(cls, value):
+        if value.lower() in RESERVED_PROJECT_SLUGS:
+            raise ValueError("This project key is reserved for an application URL")
         return value
+
+    @model_validator(mode="after")
+    def url_matches_key(self):
+        if self.slug is not None and self.slug != self.key:
+            raise ValueError("Project URL must match the project key; omit slug or set it to key")
+        return self
 
 
 class ProjectUpdate(BaseModel):
@@ -77,7 +84,13 @@ class ProjectUpdate(BaseModel):
 
 class MemberCreate(BaseModel):
     user_id: str
+    role: ProjectRole
+
+
+class ApplicationUserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     role: Role
+    active: StrictBool
 
 
 class LabelCreate(BaseModel):

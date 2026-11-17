@@ -27,7 +27,6 @@ async function load() {
   finally { if (current === sequence) loading.value = false }
 }
 watch(() => props.basePath, () => { showCreate.value = false; secret.value = ''; revealedId.value = ''; error.value = ''; tokens.value = []; void load() }, { immediate: true })
-watch(() => props.ownerRole, value => { if (value === 'reader') access.value = 'read' })
 
 async function create() {
   if (props.disabled || busy.value) return

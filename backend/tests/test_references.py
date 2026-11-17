@@ -1,11 +1,14 @@
 from sqlalchemy import select
 
 from app.models import ProjectMember, User
+from conftest import grant_project_access
 
 
 def project(client, key, name, visibility="organization"):
     response = client.post("/api/v1/projects", json={"key": key, "name": name, "visibility": visibility})
     assert response.status_code == 201
+    if visibility == 'organization':
+        grant_project_access(client, response.json()['id'])
     return response.json()
 
 
@@ -29,7 +32,7 @@ def test_suggestions_respect_visibility_and_project_number_context(env):
     assert all("Secret" not in str(row) for row in results)
     results = member.get(f"/api/v1/references/tickets?q=1&project_id={public['id']}").json()
     assert [row["id"] for row in results] == [first["id"]]
-    assert results[0]["href"] == "/application/1" and results[0]["status"] == "Open"
+    assert results[0]["href"] == "/APP/1" and results[0]["status"] == "Open"
     results = member.get(f"/api/v1/references/tickets?q=OTHER-1&project_id={public['id']}").json()
     assert [row["id"] for row in results] == [second["id"]]
     assert member.get("/api/v1/references/tickets?q=SECRET-1").json() == []
@@ -67,7 +70,7 @@ def test_user_search_is_available_to_members_and_scoped_for_private_projects(env
     assert member.get("/api/v1/references/users?q=reader").json()[0]["id"] == people["reader"]
     private = project(admin, "PRIVATE", "Private team", "private")
     with factory() as db:
-        db.add(ProjectMember(project_id=private["id"], user_id=people["member"], role="member"))
+        db.add(ProjectMember(project_id=private["id"], user_id=people["member"], role="reporter"))
         db.commit()
     results = member.get(f"/api/v1/references/users?project_id={private['id']}").json()
     assert {row["id"] for row in results} == {people["administrator"], people["member"]}

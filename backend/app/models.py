@@ -68,7 +68,7 @@ class Project(Base):
     slug: Mapped[str] = mapped_column(String(100), unique=True)
     name: Mapped[str] = mapped_column(String(150))
     description: Mapped[str] = mapped_column(Text, default="")
-    visibility: Mapped[str] = mapped_column(String(20), default="organization")
+    visibility: Mapped[str] = mapped_column(String(20), default="private")
     next_number: Mapped[int] = mapped_column(default=0)
 
 

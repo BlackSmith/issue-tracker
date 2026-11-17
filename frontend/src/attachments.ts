@@ -1,4 +1,4 @@
-import { auth } from './api'
+import { auth, reconcileAuthFailure } from './api'
 import type { Attachment } from './types'
 
 export function uploadAttachment(
@@ -26,10 +26,14 @@ export function uploadAttachment(
     }
     xhr.onerror = () => reject(new Error('Upload failed. Check your connection.'))
     xhr.onabort = () => reject(new Error('Upload canceled'))
-    xhr.onload = () => {
+    xhr.onload = async () => {
       try {
         const result = JSON.parse(xhr.responseText)
-        if (xhr.status >= 400) reject(new Error(typeof result.detail === 'string' ? result.detail : 'Upload failed'))
+        if (xhr.status >= 400) {
+          const message = typeof result.detail === 'string' ? result.detail : 'Upload failed'
+          await reconcileAuthFailure(xhr.status, message)
+          reject(new Error(message))
+        }
         else resolve(result)
       } catch { reject(new Error('Upload failed')) }
     }

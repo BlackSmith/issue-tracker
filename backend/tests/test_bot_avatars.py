@@ -28,8 +28,8 @@ def test_bot_avatar_lifecycle_and_member_response(env):
     assert admin.get('/api/v1/bots').json()[0]['avatar_url'] == url
     project = admin.post('/api/v1/projects', json={'key': 'AV', 'name': 'Avatar project'}).json()
     members = f"/api/v1/projects/{project['id']}/members"
-    admin.put(members, json={'user_id': bot['id'], 'role': 'reader'})
-    assert admin.get(members).json()[0]['avatar_url'] == url
+    admin.put(members, json={'user_id': bot['id'], 'role': 'read-only'})
+    assert next(row for row in admin.get(members).json() if row['user_id'] == bot['id'])['avatar_url'] == url
     replaced = admin.put(path, files=picture('blue')).json()['avatar_url']
     assert replaced != url
     assert admin.put(f"/api/v1/bots/{bot['id']}", json={'name': bot['name'], 'role': bot['role'], 'active': False}).status_code == 200

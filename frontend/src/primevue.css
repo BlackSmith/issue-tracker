@@ -8,6 +8,7 @@
   .p-button.quiet:hover { background: var(--accent-soft); }
   .p-button.on-dark { color: #edf6f0; }
   .detail-top .p-button[aria-label="Close detail"],
+  .detail-top .p-button[aria-label="Close settings detail"],
   .detail-top .p-button[aria-label="Close new work item"] { width: 44px; height: 44px; padding: 0; font-size: 28px; line-height: 1; flex-shrink: 0; }
   .p-select-label, .p-multiselect-label { font-weight: 400; }
   .p-select-overlay, .p-multiselect-overlay { max-width: calc(100vw - 24px); }

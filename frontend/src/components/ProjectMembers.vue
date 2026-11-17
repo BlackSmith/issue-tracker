@@ -6,23 +6,23 @@ import UserAvatar from './UserAvatar.vue'
 
 interface Member {
   user_id: string; name: string; email: string; role: string; avatar_url: string | null
-  organization_role: User['role']; active: boolean; is_bot: boolean
+  organization_role: User['role']; active: boolean; is_bot: boolean; inherited: boolean
 }
 const props = defineProps<{ project: Project; embedded?: boolean }>()
 const emit = defineEmits<{ close: []; updated: [] }>()
 const members = ref<Member[]>([]), users = ref<User[]>([])
 const drafts = ref<Record<string, string>>({})
 const loading = ref(true), loaded = ref(false), busy = ref(false), error = ref(''), message = ref('')
-const memberId = ref(''), memberRole = ref('member')
+const memberId = ref(''), memberRole = ref('reporter')
 const showAddMember = ref(false)
-const available = computed(() => users.value.filter(u => u.role && !members.value.some(m => m.user_id === u.id)))
+const available = computed(() => users.value.filter(u => u.role && u.role !== 'administrator' && (!u.is_bot || auth.user?.role === 'administrator') && !members.value.some(m => m.user_id === u.id)))
 const selected = computed(() => available.value.find(u => u.id === memberId.value))
 const path = `/projects/${props.project.id}/members`
-function roleOptions(isBot = false, organizationRole: User['role'] = null) {
+function roleOptions(isBot = false, _organizationRole: User['role'] = null) {
   return [
-    { label: 'Admin', value: 'administrator', disabled: isBot || organizationRole === 'reader' },
-    { label: 'Member', value: 'member', disabled: isBot && organizationRole === 'reader' },
-    { label: 'Reader', value: 'reader', disabled: false },
+    { label: 'Owner', value: 'owner', disabled: isBot },
+    { label: 'Reporter', value: 'reporter', disabled: false },
+    { label: 'Read-only', value: 'read-only', disabled: false },
   ]
 }
 
@@ -41,9 +41,9 @@ async function save(userId: string, role: string, adding = false) {
   try {
     await api(path, { method: 'PUT', body: JSON.stringify({ user_id: userId, role }) })
     emit('updated')
-    if (userId === auth.user?.id && auth.user.role !== 'administrator' && role !== 'administrator') return
+    if (userId === auth.user?.id && auth.user.role !== 'administrator' && role !== 'owner') return
     await load()
-    if (adding) { memberId.value = ''; memberRole.value = 'member'; showAddMember.value = false }
+    if (adding) { memberId.value = ''; memberRole.value = 'reporter'; showAddMember.value = false }
     message.value = adding ? 'Member added.' : 'Permissions updated.'
   } catch (e) { error.value = (e as Error).message }
   finally { busy.value = false }
@@ -65,8 +65,7 @@ async function remove(member: Member) {
   <div :class="{ 'modal-backdrop': !embedded }" @click.self="!embedded && !busy && emit('close')" @keydown.esc.stop="!embedded && !busy && emit('close')">
     <section :class="embedded ? 'embedded-members' : 'modal members-modal'" :role="embedded ? undefined : 'dialog'" :aria-modal="embedded ? undefined : true" aria-labelledby="members-heading" :aria-busy="loading || busy">
       <header><div><h2 id="members-heading">Project members</h2><p v-if="!embedded" class="hint">{{ project.name }}</p></div><PButton v-if="!embedded" type="button" class="quiet" :disabled="busy" aria-label="Close" @click="emit('close')">×</PButton></header>
-      <p class="hint">Admin manages project settings, members, and project labels. Member can contribute to work items but cannot configure the project. Reader is read-only. Organization readers remain read-only, and organization administrators always retain full access.</p>
-      <p v-if="project.visibility === 'organization'" class="hint">This project is visible to the organization. Removing a human member restores their default organization access; it does not block access. Bots always require explicit membership.</p>
+      <p class="hint">Owner manages the project, members, and local labels. Reporter creates and updates work items and comments. Read-only can browse tickets. Members need an explicit project role to see this project. Application admins are permanent owners of every project. Bot access is managed by application admins.</p>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
       <p v-if="message" class="hint" role="status">{{ message }}</p>
       <p v-if="loading" class="hint">Loading members…</p>
@@ -75,12 +74,11 @@ async function remove(member: Member) {
         <form v-else class="add-member" @submit.prevent="save(memberId, memberRole, true)">
           <h3>Add a member</h3>
           <div class="add-member-fields">
-            <label>Member<PSelect v-model="memberId" :options="available.map(user => ({ value: user.id, label: user.name + (user.is_bot ? ' (bot)' : ' — ' + user.email) }))" option-label="label" option-value="value" filter placeholder="Select a member" aria-label="Member" :disabled="busy || !available.length" @change="memberRole = selected?.is_bot && selected.role === 'reader' ? 'reader' : 'member'" /></label>
+            <label>Member<PSelect v-model="memberId" :options="available.map(user => ({ value: user.id, label: user.name + (user.is_bot ? ' (bot)' : ' — ' + user.email) }))" option-label="label" option-value="value" filter placeholder="Select a member" aria-label="Member" :disabled="busy || !available.length" @change="memberRole = 'reporter'" /></label>
             <label>Project role<SelectButton v-model="memberRole" :options="roleOptions(selected?.is_bot, selected?.role)" option-label="label" option-value="value" option-disabled="disabled" :allow-empty="false" size="small" aria-label="Project role" :disabled="busy" /></label>
-            <PButton type="submit" :disabled="busy || !memberId || (selected?.is_bot && selected.role === 'reader' && memberRole !== 'reader')">Add member</PButton>
+            <PButton type="submit" :disabled="busy || !memberId">Add member</PButton>
           </div>
           <PButton type="button" class="quiet" :disabled="busy" @click="showAddMember = false">Cancel</PButton>
-          <p v-if="selected?.is_bot && selected.role === 'reader'" class="hint">This bot has a read-only account. Select Reader to grant access.</p>
           <p v-if="!available.length" class="hint">All active organization members have already been added.</p>
         </form>
         <h3>Current members ({{ members.length }})</h3>
@@ -88,9 +86,13 @@ async function remove(member: Member) {
           <li v-for="member in members" :key="member.user_id" class="member-row">
             <UserAvatar :name="member.name" :src="member.avatar_url" />
             <div class="member-identity"><strong>{{ member.name }}</strong> <span v-if="member.is_bot" class="bot-badge">Bot</span><small>{{ member.email || 'Bot account' }}</small><small v-if="!member.active || !member.organization_role">{{ !member.active ? 'Inactive account' : 'No organization membership' }}</small><small v-else>Organization role: {{ member.organization_role }}</small></div>
-            <SelectButton v-model="drafts[member.user_id]" :options="roleOptions(member.is_bot, member.organization_role)" option-label="label" option-value="value" option-disabled="disabled" :allow-empty="false" size="small" :aria-label="`Project role for ${member.name}`" :disabled="busy || !member.active || !member.organization_role" />
-            <PButton type="button" :aria-label="`Save permissions for ${member.name}`" :disabled="busy || !member.active || !member.organization_role || drafts[member.user_id] === member.role" @click="save(member.user_id, drafts[member.user_id]!)">Save</PButton>
-            <PButton type="button" severity="secondary" outlined :aria-label="`Remove ${member.name}`" :disabled="busy" @click="remove(member)">Remove</PButton>
+            <span v-if="member.inherited" class="hint">Owner · Application admin</span>
+            <span v-else-if="member.is_bot && auth.user?.role !== 'administrator'" class="hint">{{ member.role }}</span>
+            <template v-else>
+              <SelectButton v-model="drafts[member.user_id]" :options="roleOptions(member.is_bot, member.organization_role)" option-label="label" option-value="value" option-disabled="disabled" :allow-empty="false" size="small" :aria-label="`Project role for ${member.name}`" :disabled="busy || !member.active || !member.organization_role" />
+              <PButton type="button" :aria-label="`Save permissions for ${member.name}`" :disabled="busy || !member.active || !member.organization_role || drafts[member.user_id] === member.role" @click="save(member.user_id, drafts[member.user_id]!)">Save</PButton>
+              <PButton type="button" severity="secondary" outlined :aria-label="`Remove ${member.name}`" :disabled="busy" @click="remove(member)">Remove</PButton>
+            </template>
           </li>
         </ul>
         <p v-else class="hint">No explicit project members yet.</p>

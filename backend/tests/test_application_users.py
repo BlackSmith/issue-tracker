@@ -32,7 +32,7 @@ def test_user_overview_is_for_application_admins_not_project_admins(env):
     factory, client, people = env
     pid = project(client('administrator'))
     with factory() as db:
-        db.add(ProjectMember(project_id=pid, user_id=people['member'], role='administrator'))
+        db.merge(ProjectMember(project_id=pid, user_id=people['member'], role='owner'))
         db.commit()
     for role in ['member', 'reader', 'outsider']:
         assert client(role).get('/api/v1/admin/users').status_code == 403
@@ -68,3 +68,22 @@ def test_only_successful_oidc_login_updates_last_login(env):
         assert member.get('/api/v1/auth/oidc/callback', follow_redirects=False).status_code == 403
         with factory() as db:
             assert db.get(User, people['member']).last_login_at.replace(tzinfo=timezone.utc) == last_login
+
+
+def test_admin_manages_user_roles_and_last_admin_is_preserved(env):
+    _, client, people = env
+    admin, member = client('administrator'), client('member')
+    own = '/api/v1/admin/users/' + people['administrator']
+    path = '/api/v1/admin/users/' + people['member']
+    assert admin.put(own, json={'role': 'member', 'active': True}).status_code == 409
+    assert admin.put(own, json={'role': 'administrator', 'active': False}).status_code == 409
+    assert member.put(path, json={'role': 'administrator', 'active': True}).status_code == 403
+    assert admin.put(path, json={'role': 'reader', 'active': True}).status_code == 422
+    assert admin.put(path, json={'role': 'administrator', 'active': True}).status_code == 200
+    assert member.get('/api/v1/admin/users').status_code == 200
+    assert admin.put(own, json={'role': 'member', 'active': True}).status_code == 200
+    assert admin.get('/api/v1/admin/users').status_code == 403
+    assert member.put(own, json={'role': 'member', 'active': False}).status_code == 200
+    assert admin.get('/api/v1/projects').status_code == 401
+    member.headers.pop('X-CSRF-Token')
+    assert member.put(path, json={'role': 'member', 'active': True}).status_code == 403

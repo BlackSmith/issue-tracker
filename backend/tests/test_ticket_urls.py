@@ -1,4 +1,6 @@
 import pytest
+from app.models import Project
+from conftest import grant_project_access
 
 
 def create_project(client, key="APP", name="Product development", **values):
@@ -30,19 +32,20 @@ def test_ticket_number_is_scoped_to_project_slug(env):
         assert response.json()["web_url"] == item["web_url"]
         assert admin.get(f"/api/v1/items/{item['id']}").json() == response.json()
     assert first_item["id"] != second_item["id"]
-    assert first["slug"] == "product-development"
+    assert first["slug"] == first['key'] == "APP"
 
 
-def test_slug_normalization_collisions_and_optional_custom_slug(env):
+def test_project_url_comes_from_key_and_rejects_independent_slug(env):
     _, client, _ = env
     admin = client("administrator")
     first = create_project(admin, name="Vývoj aplikace!")
     second = create_project(admin, key="NEXT", name="Vyvoj aplikace")
-    custom = create_project(admin, key="CUSTOM", name="Custom project", slug="my-project")
-    assert first["slug"] == "vyvoj-aplikace"
-    assert second["slug"] == "vyvoj-aplikace-2"
-    assert custom["slug"] == "my-project"
-    assert admin.post("/api/v1/projects", json={"key": "CLASH", "name": "Another", "slug": "my-project"}).status_code == 409
+    custom = create_project(admin, key="CUSTOM", name="Custom project", slug="CUSTOM")
+    assert first["slug"] == "APP"
+    assert second["slug"] == "NEXT"
+    assert custom["slug"] == "CUSTOM"
+    assert admin.post("/api/v1/projects", json={"key": "CLASH", "name": "Another", "slug": "my-project"}).status_code == 422
+    assert admin.post("/api/v1/projects", json={"key": "APP", "name": "Duplicate"}).status_code == 409
     assert admin.get("/api/v1/projects").json()[0].get("slug")
 
 
@@ -52,15 +55,42 @@ def test_invalid_and_reserved_slugs_are_rejected(env, slug):
     assert client("administrator").post("/api/v1/projects", json={"key": "APP", "name": "App", "slug": slug}).status_code == 422
 
 
-def test_automatic_slug_handles_reserved_names_and_truncation(env):
+def test_project_names_do_not_affect_url_and_reserved_keys_are_rejected(env):
     _, client, _ = env
     admin = client("administrator")
-    assert create_project(admin, name="Settings")["slug"] == "settings-project"
+    assert create_project(admin, name="Settings")["slug"] == "APP"
     first = create_project(admin, key="LONG", name="a" * 150)
     second = create_project(admin, key="LONGER", name="a" * 150)
-    assert len(first["slug"]) == len(second["slug"]) == 100
-    assert second["slug"].endswith("-2")
-    assert create_project(admin, key="UNICODE", name="東京")["slug"] == "project"
+    assert first["slug"] == "LONG"
+    assert second["slug"] == "LONGER"
+    assert create_project(admin, key="UNICODE", name="東京")["slug"] == "UNICODE"
+    for key in ['API', 'ASSETS', 'ITEMS', 'PROJECTS', 'SETTINGS']:
+        assert admin.post('/api/v1/projects', json={'key': key, 'name': 'Reserved'}).status_code == 422
+
+
+def test_existing_slug_is_an_authorized_alias_for_key_url(env):
+    factory, client, people = env
+    admin, member = client('administrator'), client('member')
+    project = create_project(admin)
+    item = create_ticket(admin, project)
+    with factory() as db:
+        db.get(Project, project['id']).slug = 'product-development'
+        db.commit()
+    row = admin.get('/api/v1/projects').json()[0]
+    assert row['slug'] == 'APP' and row['legacy_slug'] == 'product-development'
+    for slug in ['APP', 'product-development']:
+        endpoint = f'/api/v1/projects/by-slug/{slug}/items/1'
+        resolved = admin.get(endpoint)
+        assert resolved.status_code == 200
+        assert resolved.json()['id'] == item['id']
+        assert resolved.json()['web_url'] == '/APP/1'
+        assert resolved.json()['project_slug'] == 'APP'
+        assert member.get(endpoint).status_code == 404
+    references = admin.post('/api/v1/references/resolve', json={'tickets': [item['id']]}).json()
+    assert references['tickets'][0]['href'] == '/APP/1'
+    assert admin.put(f"/api/v1/projects/{project['id']}", json={
+        'name': 'Renamed', 'description': '', 'visibility': 'private'}).json()['slug'] == 'APP'
+    assert admin.get('/api/v1/projects/by-slug/product-development/items/1').json()['web_url'] == '/APP/1'
 
 
 def test_slug_lookup_preserves_private_project_access(env):
@@ -75,6 +105,7 @@ def test_slug_lookup_preserves_private_project_access(env):
     assert reader.get(path).status_code == 404
     assert client().get(path).status_code == 401
     public = create_project(admin, key="PUB", name="Public team")
+    grant_project_access(admin, public['id'])
     public_item = create_ticket(admin, public)
     assert reader.get(f"/api/v1/projects/by-slug/{public['slug']}/items/1").json()["id"] == public_item["id"]
     for slug, number in [(public["slug"], 999), ("missing-project", 1), (public["slug"], 0), (public["slug"], -1)]:

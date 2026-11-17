@@ -23,7 +23,7 @@ export function internalTicketTarget(href: string, origin: string): TicketTarget
   const legacy = legacyProjectPattern.exec(url.pathname)
   const item = url.searchParams.get('item')
   if (legacy && item && new RegExp(`^${uuidPattern}$`, 'i').test(item)) return { id: item.toLowerCase(), projectId: legacy[1]!.toLowerCase() }
-  const match = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)\/([1-9][0-9]*)\/?$/.exec(url.pathname)
+  const match = /^\/([a-z0-9]+(?:-[a-z0-9]+)*)\/([1-9][0-9]*)\/?$/i.exec(url.pathname)
   return match ? { slug: match[1]!, number: match[2]! } : null
 }
 

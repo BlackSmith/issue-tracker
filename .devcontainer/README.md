@@ -37,7 +37,7 @@ OIDC client ID: `issue-tracker`. The mock does not require a client secret. The 
 | --- | --- | --- |
 | `admin` | `admin123` | Administrator |
 | `member` | `member123` | Member |
-| `reader` | `reader123` | Reader |
+| `reader` | `reader123` | Member; assign Read-only per project |
 
 Subjects are stable UUIDs in `oidc-mock.yaml`. These identities do not automatically confer application roles or organization membership. Provision membership and roles with the CLI commands in the root `README.md`. Passwords and HTTP settings are for local development only.
 

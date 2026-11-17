@@ -9,7 +9,7 @@ def test_update_project_preserves_identifiers_and_changes_visibility(env):
     admin, member = client('administrator'), client('member')
     project = create_project(admin)
     path = f"/api/v1/projects/{project['id']}"
-    assert len(member.get('/api/v1/projects').json()) == 1
+    assert member.get('/api/v1/projects').json() == []
     response = admin.put(path, json={'name': ' Renamed project ', 'description': 'New description', 'visibility': 'private'})
     assert response.status_code == 200
     updated = response.json()
@@ -30,7 +30,7 @@ def test_project_settings_require_administrator_and_csrf(env):
     path = f"/api/v1/projects/{project['id']}"
     payload = {'name': 'Changed', 'description': '', 'visibility': 'organization'}
     for role in ('member', 'reader'):
-        assert client(role).put(path, json=payload).status_code == 403
+        assert client(role).put(path, json=payload).status_code == 404
     admin.headers.pop('X-CSRF-Token')
     assert admin.put(path, json=payload).status_code == 403
     assert client().put(path, json=payload).status_code == 403

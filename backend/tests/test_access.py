@@ -6,11 +6,14 @@ from app.main import settings
 from app.models import BrowserSession, ExternalIdentity, ProjectMember, User
 from app.providers import ExternalProfile
 from app.security import token_hash
+from conftest import grant_project_access
 
 
 def project(client, visibility="organization", key="APP"):
     response = client.post("/api/v1/projects", json={"key": key, "name": "Application", "visibility": visibility})
     assert response.status_code == 201, response.text
+    if visibility == 'organization':
+        grant_project_access(client, response.json()['id'])
     return response.json()["id"]
 
 
@@ -104,17 +107,17 @@ def test_partial_item_edit_validation_and_access(env):
     assert admin.patch(path, json={"priority": "High"}).status_code == 403
 
 
-def test_project_membership_and_organization_role_ceiling(env):
+def test_explicit_project_roles_control_contribution(env):
     _, client, people = env
     admin, member, reader = client("administrator"), client("member"), client("reader")
     pid = project(admin, "private")
-    assert admin.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["member"], "role": "reader"}).status_code == 200
+    assert admin.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["member"], "role": "read-only"}).status_code == 200
     assert member.get(f"/api/v1/projects/{pid}/items").status_code == 200
     assert member.post(f"/api/v1/projects/{pid}/items", json={"title": "No"}).status_code == 403
-    assert admin.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["reader"], "role": "administrator"}).status_code == 403
-    assert admin.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["reader"], "role": "reader"}).status_code == 200
+    assert admin.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["reader"], "role": "owner"}).status_code == 200
+    assert admin.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["reader"], "role": "read-only"}).status_code == 200
     assert reader.post(f"/api/v1/projects/{pid}/items", json={"title": "No"}).status_code == 403
-    assert member.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["member"], "role": "administrator"}).status_code == 403
+    assert member.put(f"/api/v1/projects/{pid}/members", json={"user_id": people["member"], "role": "owner"}).status_code == 403
 
 
 def test_member_management_and_revoked_private_access(env):
@@ -126,16 +129,16 @@ def test_member_management_and_revoked_private_access(env):
     path = f"/api/v1/projects/{pid}/members"
     creator = admin.get(path).json()
     assert len(creator) == 1 and creator[0]['user_id'] == people['administrator']
-    assert admin.put(path, json={"user_id": people["member"], "role": "member"}).status_code == 200
+    assert admin.put(path, json={"user_id": people["member"], "role": "reporter"}).status_code == 200
     rows = admin.get(path).json()
     assert len(rows) == 2
     assert next(row for row in rows if row['user_id'] == people['member']) == {"user_id": people["member"], "name": "member", "email": "member@example.test",
-                       "role": "member", "organization_role": "member", "active": True, "is_bot": False, "avatar_url": None}
+                       "role": "reporter", "organization_role": "member", "inherited": False, "active": True, "is_bot": False, "avatar_url": None}
     assert member.post(f"/api/v1/projects/{pid}/items", json={"title": "Allowed"}).status_code == 201
     assert member.get(path).status_code == 403
     assert member.delete(f"{path}/{people['member']}").status_code == 403
-    assert admin.put(path, json={"user_id": people["member"], "role": "reader"}).status_code == 200
-    assert next(row for row in admin.get(path).json() if row['user_id'] == people['member'])["role"] == "reader"
+    assert admin.put(path, json={"user_id": people["member"], "role": "read-only"}).status_code == 200
+    assert next(row for row in admin.get(path).json() if row['user_id'] == people['member'])["role"] == "read-only"
     assert member.post(f"/api/v1/projects/{pid}/items", json={"title": "Denied"}).status_code == 403
     assert member.get(url).status_code == 200
     assert admin.delete(f"{path}/{people['member']}").status_code == 200
@@ -145,7 +148,7 @@ def test_member_management_and_revoked_private_access(env):
     assert admin.delete(f"{path}/{people['member']}").status_code == 404
 
 
-def test_membership_removal_preserves_organization_access_and_requires_csrf(env):
+def test_membership_removal_revokes_access_and_requires_csrf(env):
     _, client, people = env
     admin, member, reader = client("administrator"), client("member"), client("reader")
     pid = project(admin)
@@ -153,12 +156,12 @@ def test_membership_removal_preserves_organization_access_and_requires_csrf(env)
     assert member.get(path).status_code == 403
     assert reader.get(path).status_code == 403
     assert client().get(path).status_code == 401
-    assert admin.put(path, json={"user_id": people["member"], "role": "reader"}).status_code == 200
+    assert admin.put(path, json={"user_id": people["member"], "role": "read-only"}).status_code == 200
     admin.headers.pop("X-CSRF-Token")
     assert admin.delete(f"{path}/{people['member']}").status_code == 403
     admin.headers["X-CSRF-Token"] = "test-csrf"
     assert admin.delete(f"{path}/{people['member']}").status_code == 200
-    assert member.post(f"/api/v1/projects/{pid}/items", json={"title": "Default organization access"}).status_code == 201
+    assert member.post(f"/api/v1/projects/{pid}/items", json={"title": "No implicit access"}).status_code == 404
     assert admin.get("/api/v1/projects/missing/members").status_code == 404
     assert admin.delete(f"/api/v1/projects/missing/members/{people['member']}").status_code == 404
 
@@ -168,7 +171,7 @@ def test_inactive_members_remain_visible_and_can_be_removed(env):
     admin = client("administrator")
     pid = project(admin, "private")
     path = f"/api/v1/projects/{pid}/members"
-    assert admin.put(path, json={"user_id": people["member"], "role": "member"}).status_code == 200
+    assert admin.put(path, json={"user_id": people["member"], "role": "reporter"}).status_code == 200
     with factory() as db:
         db.get(User, people["member"]).active = False
         db.commit()

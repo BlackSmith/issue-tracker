@@ -19,8 +19,7 @@ def visible_project(user: User):
         return exists().where(ProjectMember.project_id == Project.id, ProjectMember.user_id == user.id)
     if user.role == "administrator":
         return True
-    return or_(Project.visibility == "organization", exists().where(
-        ProjectMember.project_id == Project.id, ProjectMember.user_id == user.id))
+    return exists().where(ProjectMember.project_id == Project.id, ProjectMember.user_id == user.id)
 
 
 def context_project(db: Session, user: User, project_id: str | None):
@@ -40,7 +39,7 @@ def user_reference(user: User):
 def ticket_reference(item: WorkItem, project: Project):
     return {"kind": "ticket", "id": item.id, "project_id": project.id, "number": item.number,
             "reference": f"{project.key}-{item.number}", "title": item.title,
-            "status": item.status, "href": f"/{project.slug}/{item.number}"}
+             "status": item.status, "href": f"/{project.key}/{item.number}"}
 
 
 def literal_search(value: str) -> str:
@@ -52,11 +51,8 @@ def suggest_users(q: str = Query("", max_length=200), project_id: str | None = N
                   user: User = Depends(organization_user), db: Session = Depends(get_db)):
     project = context_project(db, user, project_id)
     query = select(User).where(User.active.is_(True), User.role.is_not(None))
-    if project and project.visibility == "private":
+    if project:
         query = query.where(or_(User.role == "administrator", exists().where(
-            ProjectMember.project_id == project.id, ProjectMember.user_id == User.id)))
-    elif project:
-        query = query.where(or_(User.is_bot.is_(False), exists().where(
             ProjectMember.project_id == project.id, ProjectMember.user_id == User.id)))
     term = literal_search(q.lstrip("@").strip())
     if term:
