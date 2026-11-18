@@ -4,6 +4,7 @@ import { api } from '../api'
 import type { LabelDefinition } from '../types'
 import LabelBadge from './LabelBadge.vue'
 import SettingsDetailPanel from './SettingsDetailPanel.vue'
+import { t } from '../i18n'
 
 const props = defineProps<{ projectId?: string; panelId?: string }>()
 const emit = defineEmits<{ updated: []; open: [id: string]; close: [] }>()
@@ -58,7 +59,7 @@ async function save() {
   finally { busy.value = false }
 }
 async function remove(label: LabelDefinition) {
-  if (!window.confirm(`Delete label "${label.name}"?`)) return
+  if (!window.confirm(t('Delete label "{name}"?', { name: label.name }))) return
   busy.value = true; error.value = ''; message.value = ''
   try {
     await api(`${base.value}/${label.id}`, { method: 'DELETE' })
@@ -70,33 +71,33 @@ async function remove(label: LabelDefinition) {
 </script>
 
 <template>
-  <section class="label-manager" aria-label="Label management">
-    <p class="hint">{{ projectId ? 'All organization labels are inherited automatically. Manage inherited labels in organization settings.' : 'Organization labels are available in every project, including projects created later.' }}</p>
-    <PMessage v-if="error && (!panelMode || !showForm)" severity="error">{{ error }}</PMessage><PMessage v-if="message" severity="success">{{ message }}</PMessage>
-    <PButton v-if="!showForm" type="button" class="add-label-toggle" :disabled="busy || loading" :aria-expanded="false" @click="add">Add label</PButton>
-    <component v-if="showForm" :is="panelMode ? SettingsDetailPanel : 'div'" v-bind="panelMode ? { title: !panelFound ? 'Label details' : editing ? 'Edit label' : 'Add label', busy } : {}" @close="cancel">
-    <PMessage v-if="panelMode && error" severity="error">{{ error }}</PMessage>
-    <PMessage v-if="!panelFound" severity="error">Label not found.</PMessage>
-    <form v-else class="label-form" :aria-label="editing ? 'Edit label' : 'Add label'" @submit.prevent="save">
-      <h3 v-if="!panelMode">{{ editing ? 'Edit label' : 'Add label' }}</h3>
+  <section class="label-manager" :aria-label="t('Label management')">
+    <p class="hint">{{ t(projectId ? 'All organization labels are inherited automatically. Manage inherited labels in organization settings.' : 'Organization labels are available in every project, including projects created later.') }}</p>
+    <PMessage v-if="error && (!panelMode || !showForm)" severity="error">{{ t(error) }}</PMessage><PMessage v-if="message" severity="success">{{ t(message) }}</PMessage>
+    <PButton v-if="!showForm" type="button" class="add-label-toggle" :disabled="busy || loading" :aria-expanded="false" @click="add">{{ t('Add label') }}</PButton>
+    <component v-if="showForm" :is="panelMode ? SettingsDetailPanel : 'div'" v-bind="panelMode ? { title: t(!panelFound ? 'Label details' : editing ? 'Edit label' : 'Add label'), busy } : {}" @close="cancel">
+    <PMessage v-if="panelMode && error" severity="error">{{ t(error) }}</PMessage>
+    <PMessage v-if="!panelFound" severity="error">{{ t('Label not found.') }}</PMessage>
+    <form v-else class="label-form" :aria-label="t(editing ? 'Edit label' : 'Add label')" @submit.prevent="save">
+      <h3 v-if="!panelMode">{{ t(editing ? 'Edit label' : 'Add label') }}</h3>
       <div class="label-form-fields">
-        <label>Name<InputText v-model="form.name" required maxlength="50" :disabled="busy" /></label>
-        <label>Color<input v-model="form.color" type="color" required :disabled="busy" /></label>
+        <label>{{ t('Name') }}<InputText v-model="form.name" required maxlength="50" :disabled="busy" /></label>
+        <label>{{ t('Color') }}<input v-model="form.color" type="color" required :disabled="busy" /></label>
       </div>
-      <label>Description<PTextarea v-model="form.description" rows="2" maxlength="2000" :disabled="busy" /></label>
-      <p class="hint">Names must be unique among the labels available in a project. Renaming preserves existing ticket assignments. Used labels cannot be deleted.</p>
-      <footer><PButton type="button" severity="secondary" outlined :disabled="busy" @click="cancel">Cancel</PButton><PButton type="submit" :loading="busy" :disabled="busy || loading">{{ editing ? 'Save label' : 'Add label' }}</PButton></footer>
+      <label>{{ t('Description') }}<PTextarea v-model="form.description" rows="2" maxlength="2000" :disabled="busy" /></label>
+      <p class="hint">{{ t('Names must be unique among the labels available in a project. Renaming preserves existing ticket assignments. Used labels cannot be deleted.') }}</p>
+      <footer><PButton type="button" severity="secondary" outlined :disabled="busy" @click="cancel">{{ t('Cancel') }}</PButton><PButton type="submit" :loading="busy" :disabled="busy || loading">{{ t(editing ? 'Save label' : 'Add label') }}</PButton></footer>
     </form>
     </component>
-    <p v-if="loading" class="hint">Loading labels…</p>
+    <p v-if="loading" class="hint">{{ t('Loading labels…') }}</p>
     <ul v-else class="managed-labels">
       <li v-for="label in labels" :key="label.id">
         <div><LabelBadge :name="label.name" :definition="label" /><p v-if="label.description">{{ label.description }}</p></div>
-        <div v-if="label.project_id === (projectId || null)" class="label-actions"><PButton severity="secondary" outlined :disabled="busy" @click="edit(label)">Edit</PButton><PButton severity="danger" outlined :disabled="busy" @click="remove(label)">Delete</PButton></div>
-        <small v-else>Inherited</small>
+        <div v-if="label.project_id === (projectId || null)" class="label-actions"><PButton severity="secondary" outlined :disabled="busy" @click="edit(label)">{{ t('Edit') }}</PButton><PButton severity="danger" outlined :disabled="busy" @click="remove(label)">{{ t('Delete') }}</PButton></div>
+        <small v-else>{{ t('Inherited') }}</small>
       </li>
     </ul>
-    <p v-if="!loading && !labels.length" class="hint">No labels defined yet.</p>
+    <p v-if="!loading && !labels.length" class="hint">{{ t('No labels defined yet.') }}</p>
   </section>
 </template>
 

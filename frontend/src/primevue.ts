@@ -1,5 +1,6 @@
-import type { App } from 'vue'
-import PrimeVue from 'primevue/config'
+import { watch, type App } from 'vue'
+import PrimeVue, { defaultOptions } from 'primevue/config'
+import { language, t } from './i18n'
 import { definePreset } from '@primeuix/themes'
 import Aura from '@primeuix/themes/aura'
 import Button from 'primevue/button'
@@ -40,6 +41,15 @@ const preset = definePreset(Aura, {
 
 export function installPrimeVue(app: App) {
   app.use(PrimeVue, { theme: { preset, options: { darkModeSelector: false, cssLayer: { name: 'primevue', order: 'legacy, primevue, app' } } } })
+  watch(language, () => {
+    const base = defaultOptions.locale!
+    app.config.globalProperties.$primevue.config.locale = {
+      ...base,
+      emptyFilterMessage: t('No results found'), emptySearchMessage: t('No results found'), emptyMessage: t('No available options'),
+      searchMessage: t('{0} results are available'), selectionMessage: t('{0} items selected'), emptySelectionMessage: t('No selected item'),
+      aria: Object.fromEntries(Object.entries(base.aria || {}).map(([key, value]) => [key, t(value as string)])),
+    }
+  }, { immediate: true })
   app.component('PButton', Button)
   app.component('InputText', InputText)
   app.component('PTextarea', Textarea)

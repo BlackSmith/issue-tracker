@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { api } from '../api'
 import type { ApiToken } from '../types'
+import { dateTime, t } from '../i18n'
 
 const props = withDefaults(defineProps<{
   basePath?: string
@@ -62,24 +63,24 @@ async function copy() {
     copied.value = true
   } catch { secretInput.value?.$el.select(); error.value = 'Select and copy the token shown above.' }
 }
-function formatted(value: string | null) { return value ? new Date(value).toLocaleString() : 'Never' }
+function formatted(value: string | null) { return dateTime(value) }
 </script>
 
 <template>
   <section class="token-manager">
-    <header><div><h2>{{ title }}</h2><p>Use a separate token for each integration or AI tool. Access is limited by the account and its project permissions.</p></div><PButton type="button" class="quiet" :disabled="loading || busy" @click="error = ''; load()">Refresh</PButton></header>
-    <PButton v-if="!showCreate" type="button" class="token-create-toggle" :disabled="busy || disabled" :aria-expanded="false" @click="showCreate = true; error = ''">Create token</PButton>
-    <p v-if="disabled && !showCreate" class="hint">Enable this bot before issuing a token.</p>
+    <header><div><h2>{{ t(title) }}</h2><p>{{ t('Use a separate token for each integration or AI tool. Access is limited by the account and its project permissions.') }}</p></div><PButton type="button" class="quiet" :disabled="loading || busy" @click="error = ''; load()">{{ t('Refresh') }}</PButton></header>
+    <PButton v-if="!showCreate" type="button" class="token-create-toggle" :disabled="busy || disabled" :aria-expanded="false" @click="showCreate = true; error = ''">{{ t('Create token') }}</PButton>
+    <p v-if="disabled && !showCreate" class="hint">{{ t('Enable this bot before issuing a token.') }}</p>
     <form v-if="showCreate" class="token-create-form" @submit.prevent="create">
-      <label>Token name<InputText v-model="name" required maxlength="100" placeholder="e.g. AI assistant or reporting tool" :disabled="busy || disabled" /></label>
-      <div class="token-fields"><label>Permissions<PSelect v-model="access" :options="[{ label: 'Read-only', value: 'read' }, { label: 'Read and write', value: 'write', disabled: ownerRole === 'reader' }]" option-label="label" option-value="value" option-disabled="disabled" aria-label="Permissions" :disabled="busy || disabled" /></label><label>Expires at<InputText v-model="expiresAt" type="datetime-local" required :disabled="busy || disabled" /></label></div>
-      <div class="token-create-footer"><span>{{ disabled ? 'Enable this bot before issuing a token.' : 'Expiration is required, up to one year. Browser login is separate from API access.' }}</span><div class="token-create-actions"><PButton type="button" severity="secondary" outlined :disabled="busy" @click="showCreate = false">Cancel</PButton><PButton type="submit" :loading="busy" :disabled="busy || disabled">Create token</PButton></div></div>
+      <label>{{ t('Token name') }}<InputText v-model="name" required maxlength="100" :placeholder="t('e.g. AI assistant or reporting tool')" :disabled="busy || disabled" /></label>
+      <div class="token-fields"><label>{{ t('Permissions') }}<PSelect v-model="access" :options="[{ label: t('Read-only'), value: 'read' }, { label: t('Read and write'), value: 'write', disabled: ownerRole === 'reader' }]" option-label="label" option-value="value" option-disabled="disabled" :aria-label="t('Permissions')" :disabled="busy || disabled" /></label><label>{{ t('Expires at') }}<InputText v-model="expiresAt" type="datetime-local" required :disabled="busy || disabled" /></label></div>
+      <div class="token-create-footer"><span>{{ t(disabled ? 'Enable this bot before issuing a token.' : 'Expiration is required, up to one year. Browser login is separate from API access.') }}</span><div class="token-create-actions"><PButton type="button" severity="secondary" outlined :disabled="busy" @click="showCreate = false">{{ t('Cancel') }}</PButton><PButton type="submit" :loading="busy" :disabled="busy || disabled">{{ t('Create token') }}</PButton></div></div>
     </form>
-    <div v-if="secret" class="token-reveal" role="status"><strong>Copy your token now</strong><p>The full value is shown only once.</p><div><InputText ref="secretInput" :model-value="secret" readonly aria-label="New API token" spellcheck="false" /><PButton type="button" @click="copy">{{ copied ? 'Copied' : 'Copy' }}</PButton></div><PButton type="button" class="quiet" @click="secret = ''">I have saved the token</PButton></div>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-if="loading" class="hint">Loading tokens…</p>
-    <p v-else-if="!tokens.length" class="hint">No tokens yet. Create one to connect an integration.</p>
-    <ul v-else class="token-list"><li v-for="token in tokens" :key="token.id"><div class="token-row-top"><strong>{{ token.name }}</strong><span class="token-state" :data-status="token.status">{{ token.status }}</span><PButton type="button" severity="danger" outlined :disabled="busy || token.status === 'revoked'" @click="revoke(token)">Revoke</PButton></div><code>{{ token.prefix }}…</code><div class="token-metadata"><span>{{ token.scopes.includes('write') ? 'Read and write' : 'Read-only' }}</span><span>Expires {{ formatted(token.expires_at) }}</span><span>Last used {{ formatted(token.last_used_at) }}</span></div></li></ul>
+    <div v-if="secret" class="token-reveal" role="status"><strong>{{ t('Copy your token now') }}</strong><p>{{ t('The full value is shown only once.') }}</p><div><InputText ref="secretInput" :model-value="secret" readonly :aria-label="t('New API token')" spellcheck="false" /><PButton type="button" @click="copy">{{ t(copied ? 'Copied' : 'Copy') }}</PButton></div><PButton type="button" class="quiet" @click="secret = ''">{{ t('I have saved the token') }}</PButton></div>
+    <p v-if="error" class="error" role="alert">{{ t(error) }}</p>
+    <p v-if="loading" class="hint">{{ t('Loading tokens…') }}</p>
+    <p v-else-if="!tokens.length" class="hint">{{ t('No tokens yet. Create one to connect an integration.') }}</p>
+    <ul v-else class="token-list"><li v-for="token in tokens" :key="token.id"><div class="token-row-top"><strong>{{ token.name }}</strong><span class="token-state" :data-status="token.status">{{ t(token.status) }}</span><PButton type="button" severity="danger" outlined :disabled="busy || token.status === 'revoked'" @click="revoke(token)">{{ t('Revoke') }}</PButton></div><code>{{ token.prefix }}…</code><div class="token-metadata"><span>{{ t(token.scopes.includes('write') ? 'Read and write' : 'Read-only') }}</span><span>{{ t('Expires') }} {{ formatted(token.expires_at) }}</span><span>{{ t('Last used') }} {{ formatted(token.last_used_at) }}</span></div></li></ul>
   </section>
 </template>
 

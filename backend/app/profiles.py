@@ -26,7 +26,7 @@ def avatar_url(user: User) -> str | None:
 def profile_json(user: User):
     return {"id": user.id, "name": user.name, "email": user.email, "role": user.role, "is_bot": user.is_bot,
             "avatar_url": avatar_url(user), "theme_accent": user.theme_accent,
-            "theme_background": user.theme_background}
+            "theme_background": user.theme_background, "language": user.language}
 
 
 @router.get("/me")
@@ -37,6 +37,8 @@ def get_profile(user: User = Depends(current_user)):
 @router.put("/me", dependencies=[Depends(csrf)])
 def update_profile(payload: ProfileUpdate, user: User = Depends(current_user), db: Session = Depends(get_db)):
     for field, value in payload.model_dump().items():
+        if field == "language" and value is None:
+            continue
         setattr(user, field, value)
     db.commit()
     return profile_json(user)

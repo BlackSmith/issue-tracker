@@ -4,6 +4,7 @@ import { api } from '../api'
 import type { Project } from '../types'
 import ProjectMembers from './ProjectMembers.vue'
 import LabelManager from './LabelManager.vue'
+import { t } from '../i18n'
 
 const props = defineProps<{ project: Project }>()
 const emit = defineEmits<{ close: []; updated: [project: Project]; labelsUpdated: []; permissionsUpdated: [] }>()
@@ -23,24 +24,24 @@ async function save() {
 </script>
 
 <template>
-  <PDialog :visible="true" modal header="Project settings" class="project-settings-modal" :closable="!busy" :dismissable-mask="!busy" :close-on-escape="!busy" @update:visible="!$event && emit('close')">
+  <PDialog :visible="true" modal :header="t('Project settings')" class="project-settings-modal" :closable="!busy" :dismissable-mask="!busy" :close-on-escape="!busy" @update:visible="!$event && emit('close')">
       <p class="hint">{{ project.name }}</p>
       <PTabs v-model:value="tab">
-        <PTabList aria-label="Project settings sections">
-          <PTab value="general" :disabled="busy">General</PTab>
-          <PTab value="members" :disabled="busy">Members</PTab>
-          <PTab value="labels" :disabled="busy">Labels</PTab>
+        <PTabList :aria-label="t('Project settings sections')">
+          <PTab value="general" :disabled="busy">{{ t('General') }}</PTab>
+          <PTab value="members" :disabled="busy">{{ t('Members') }}</PTab>
+          <PTab value="labels" :disabled="busy">{{ t('Labels') }}</PTab>
         </PTabList>
         <PTabPanels>
           <PTabPanel value="general">
       <form @submit.prevent="save">
-        <label>Project name<InputText v-model="form.name" required maxlength="150" :disabled="busy" /></label>
-        <label>Description<PTextarea v-model="form.description" rows="4" maxlength="10000" :disabled="busy" /></label>
-        <p class="hint">Only assigned project members and application admins can access this project.</p>
-        <div class="form-grid"><label>Project key<InputText :model-value="project.key" readonly /></label><label>Project URL<InputText :model-value="`/${project.slug}/`" readonly /></label></div>
-        <p class="hint">The project key and URL stay stable when you rename the project.</p>
-        <PMessage v-if="error" severity="error">{{ error }}</PMessage><PMessage v-if="message" severity="success">{{ message }}</PMessage>
-        <footer><PButton type="button" severity="secondary" outlined :disabled="busy" @click="emit('close')">Close</PButton><PButton type="submit" :loading="busy" :disabled="busy">Save changes</PButton></footer>
+        <label>{{ t('Project name') }}<InputText v-model="form.name" required maxlength="150" :disabled="busy" /></label>
+        <label>{{ t('Description') }}<PTextarea v-model="form.description" rows="4" maxlength="10000" :disabled="busy" /></label>
+        <p class="hint">{{ t('Only assigned project members and application admins can access this project.') }}</p>
+        <div class="form-grid"><label>{{ t('Project key') }}<InputText :model-value="project.key" readonly /></label><label>{{ t('Project URL') }}<InputText :model-value="`/${project.slug}/`" readonly /></label></div>
+        <p class="hint">{{ t('The project key and URL stay stable when you rename the project.') }}</p>
+        <PMessage v-if="error" severity="error">{{ t(error) }}</PMessage><PMessage v-if="message" severity="success">{{ t(message) }}</PMessage>
+        <footer><PButton type="button" severity="secondary" outlined :disabled="busy" @click="emit('close')">{{ t('Close') }}</PButton><PButton type="submit" :loading="busy" :disabled="busy">{{ t('Save changes') }}</PButton></footer>
       </form>
           </PTabPanel>
           <PTabPanel value="members"><ProjectMembers v-if="tab === 'members'" :project="project" embedded @updated="emit('permissionsUpdated')" /></PTabPanel>

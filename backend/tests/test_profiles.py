@@ -26,6 +26,7 @@ def test_profile_defaults_and_own_only_updates(env):
     current = member.get("/api/v1/users/me").json()
     assert current["theme_accent"] == "green" and current["theme_background"] == "white"
     assert current["avatar_url"] is None
+    assert current["language"] == "en"
     response = member.put("/api/v1/users/me", json=profile(name="  Updated Member  "))
     assert response.status_code == 200
     result = response.json()
@@ -53,6 +54,7 @@ def test_all_authenticated_users_can_manage_own_profile(env, role):
     {"name": "   "}, {"email": "invalid-address"}, {"email": "a@b\r\ninvalid"},
     {"theme_accent": "#ffffff"}, {"theme_background": "url(https://example.com)"},
     {"role": "administrator"}, {"id": "another-user"}, {"active": False},
+    {"language": "de"},
 ])
 def test_profile_validation_prevents_privilege_changes(env, values):
     _, client, _ = env
@@ -74,6 +76,16 @@ def test_profile_authentication_and_csrf(env):
     assert member.put("/api/v1/users/me", json=profile()).status_code == 403
     assert member.put("/api/v1/users/me/avatar", files={"file": ("picture.png", png())}).status_code == 403
     assert member.delete("/api/v1/users/me/avatar").status_code == 403
+
+
+def test_language_is_account_scoped_and_preserved_for_legacy_profile_updates(env):
+    _, client, _ = env
+    member, reader = client("member"), client("reader")
+    assert member.put("/api/v1/users/me", json=profile(language="cs")).json()["language"] == "cs"
+    assert member.get("/api/v1/auth/me").json()["user"]["language"] == "cs"
+    assert reader.get("/api/v1/users/me").json()["language"] == "en"
+    assert member.put("/api/v1/users/me", json=profile()).json()["language"] == "cs"
+    assert member.put("/api/v1/users/me", json=profile(language="en")).json()["language"] == "en"
 
 
 def test_avatar_normalization_replacement_and_removal(env):
@@ -114,7 +126,7 @@ def test_contact_profile_survives_oidc_signin_with_same_external_identity(env):
     with factory() as db:
         db.add(ExternalIdentity(user_id=people["member"], issuer="https://identity.example", subject="original-subject"))
         db.commit()
-    assert member.put("/api/v1/users/me", json=profile()).status_code == 200
+    assert member.put("/api/v1/users/me", json=profile(language="cs")).status_code == 200
 
     class Provider:
         async def identity(self, request):
@@ -127,6 +139,7 @@ def test_contact_profile_survives_oidc_signin_with_same_external_identity(env):
         assert result["id"] == people["member"]
         assert result["name"] == "Updated Member" and result["email"] == "updated@example.test"
         assert result["theme_accent"] == "blue" and result["theme_background"] == "sand"
+        assert result["language"] == "cs"
     with factory() as db:
         identity = db.scalar(select(ExternalIdentity).where(ExternalIdentity.user_id == people["member"]))
         assert identity.issuer == "https://identity.example" and identity.subject == "original-subject"

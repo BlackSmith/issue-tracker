@@ -4,6 +4,10 @@
 
 ### Added
 
+- Configurable OIDC and Facebook providers through TOML with environment overrides, alongside administrator-created local password accounts with Argon2id, single-use invitations, password changes, and administrator-controlled recovery.
+- Encrypted SMTP outboxes with bounded delivery retries, development Mailpit support, and migrations `0010`/`0011` for local credentials, password links, session revocation versions, and login throttling.
+- English and Czech interface localization with account-scoped language preferences, localized validation/activity rendering, and migration `0012`.
+- Transactional ticket email notifications for project Owners, authors, assignees, comment/activity participants, and stable user mentions, with recipient deduplication, delivery-time access checks, and migration `0013`.
 - PrimeVue 4 controls with an Aura-based theme that follows account appearance preferences.
 - Application settings with Organization, Users, and Bots tabs, accessible only to application administrators.
 - Searchable, sortable, paginated human account overview, including inactive and pending accounts, application roles, account status, and last successful OIDC sign-in.
@@ -16,6 +20,8 @@
 
 ### Changed
 
+- Personal settings include language selection and local password management; organization user details include authentication method, login email, and invitation/recovery delivery state.
+- Status badges and assignee avatars/icons are shared across ticket displays and filter controls.
 - Labels use rounded, solid-color badges throughout the interface, with white text on green and darker backgrounds and dark text on light backgrounds.
 - Application roles are Admin and Member; project roles are Owner, Reporter, and Read-only. Migration `0009` converts existing roles without adding memberships. Project access requires explicit membership, while application admins are permanent owners of all projects.
 - Organization settings is anchored at the bottom of the sidebar and restricted to application admins, including Users and Bots. User details support application-role/status management while preserving at least one active admin.
@@ -33,6 +39,8 @@
 
 ### Fixed
 
+- Opening another password setup link in the same browser document refreshes the setup form and discards the previous token and draft.
+- Password resets, login-email changes, and account disabling revoke browser sessions through account authentication versions while preserving independent API token lifecycles.
 - Expired browser sessions now return the interface to sign-in instead of leaving a stale user and failing Sign out with Invalid CSRF token. Authentication failures synchronize through a shared session refresh; logout refreshes CSRF first, and failed writes are never automatically replayed.
 - Project administrators immediately lose settings access after removing or demoting their own membership.
 - Project dialogs close when browser navigation changes the route.
@@ -41,7 +49,8 @@
 
 ### Verification
 
-- Backend: 136 tests passed.
-- Frontend: 17 tests passed; TypeScript checks and production build passed.
+- Backend: 168 tests passed.
+- Frontend: 22 tests passed; TypeScript checks and production build passed.
 - PostgreSQL migration and model alignment verified without changing existing user counts.
 - Shared-browser verification covered desktop/mobile layouts, real OIDC sign-in, authorization boundaries, filters, project settings, forms, and application user administration.
+- Shared-browser verification also covered local password invitation/recovery, account language persistence, Czech ticket flows, and actual ticket notification SMTP delivery to Mailpit for creation, mentions, comments, reassignment, and status changes.

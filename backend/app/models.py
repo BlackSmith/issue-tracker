@@ -25,9 +25,11 @@ class User(Base):
     active: Mapped[bool] = mapped_column(default=True)
     is_bot: Mapped[bool] = mapped_column(default=False, server_default=false())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    auth_version: Mapped[int] = mapped_column(default=0, server_default="0")
     avatar: Mapped[bytes | None] = mapped_column(LargeBinary)
     theme_accent: Mapped[str] = mapped_column(String(20), default="green", server_default="green")
     theme_background: Mapped[str] = mapped_column(String(20), default="white", server_default="white")
+    language: Mapped[str] = mapped_column(String(2), default="en", server_default="en")
 
 
 class ExternalIdentity(Base):
@@ -44,6 +46,45 @@ class BrowserSession(Base):
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     data: Mapped[dict] = mapped_column(JSON, default=dict)
     expires_at: Mapped[int] = mapped_column(index=True, default=lambda: int(time.time()) + 43200)
+
+
+class PasswordCredential(Base):
+    __tablename__ = "password_credentials"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    login_email: Mapped[str] = mapped_column(String(320), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(Text)
+
+
+class PasswordLink(Base):
+    __tablename__ = "password_links"
+    secret_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[int] = mapped_column(BigInteger, default=time.time_ns, server_default="0")
+    expires_at: Mapped[int] = mapped_column(BigInteger)
+    used: Mapped[bool] = mapped_column(default=False)
+    recipient: Mapped[str] = mapped_column(String(320))
+    encrypted_body: Mapped[str | None] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(default=0)
+    next_attempt_at: Mapped[int] = mapped_column(BigInteger)
+    delivery_status: Mapped[str] = mapped_column(String(20), default="queued")
+
+
+class LoginThrottle(Base):
+    __tablename__ = "login_throttles"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    attempts: Mapped[int] = mapped_column(default=0)
+    expires_at: Mapped[int] = mapped_column(BigInteger)
+
+
+class TicketNotification(Base):
+    __tablename__ = "ticket_notifications"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    item_id: Mapped[str] = mapped_column(ForeignKey("work_items.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    encrypted_body: Mapped[str | None] = mapped_column(Text)
+    attempts: Mapped[int] = mapped_column(default=0)
+    next_attempt_at: Mapped[int] = mapped_column(BigInteger, index=True)
+    delivery_status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
 
 
 class ApiToken(Base):

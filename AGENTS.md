@@ -2,14 +2,14 @@
 
 ## Project Status
 
-The first development increment is implemented: FastAPI/Vue skeleton, PostgreSQL migrations, OIDC login and server-side sessions, CLI membership provisioning, personal profiles and appearance settings, project permissions, work items with URL filters, comments/activity, local attachments, personal API tokens, and administrator-managed bot accounts. See `README.md` for startup and current limitations and `docs/agent-memory.md` for verified environment findings. The full scope below includes planned capabilities; do not assume they all exist.
+The first development increment is implemented: FastAPI/Vue skeleton, PostgreSQL migrations, configurable OIDC/Facebook/local-password login and server-side sessions, administrator-managed password invitations/recovery with an encrypted SMTP outbox, CLI membership provisioning, personal profiles and appearance settings, project permissions, work items with URL filters, comments/activity, local attachments, personal API tokens, and administrator-managed bot accounts. See `README.md` for startup and current limitations and `docs/agent-memory.md` for verified environment findings. The full scope below includes planned capabilities; do not assume they all exist.
 
 ## Product Scope
 
 - Build a standalone issue tracker inspired by GitLab Work Items, without Git hosting or CI/CD features.
 - Deploy one instance per organization, with multiple projects within the instance.
 - Prioritize a clear interface, powerful filtering, labels, convenient image and file uploads, a public integration API, API tokens, and webhooks.
-- Use English for the initial application UI and all project files. Communicate with the user in Czech.
+- Support English (default) and Czech interface languages through the shared frontend translation catalog. Keep API enum values and user-authored content independent of interface language. Write project files in English except localization resources. Communicate with the user in Czech.
 
 ## Agreed Technology
 
@@ -27,12 +27,14 @@ The first development increment is implemented: FastAPI/Vue skeleton, PostgreSQL
 
 - Use Authlib and generic OpenID Connect support rather than a Keycloak-specific integration. Compatible providers include Keycloak and Google.
 - Keep provider communication separate from internal users, sessions, and authorization. Allow a future provider-specific OAuth adapter to return a normalized external identity.
-- Do not implement Facebook Login in the current scope.
+- Support Facebook OAuth and local passwords alongside multiple configured OIDC providers; Keycloak is one OIDC option. Configuration uses TOML selected by `TRACKER_CONFIG`, with environment and `.env` overrides.
+- Local accounts are administrator-created with emailed single-use setup links; users change their password with the current password. Only administrators initiate recovery/resend and manage the separate login email. Do not add self-service recovery. Use Argon2id, encrypted outbox payloads, browser-only credential management, CSRF protection, and login throttling. Reset/login-email changes revoke passwords and browser sessions; API tokens have an independent lifecycle.
+- Keep one authentication method per account for now, without automatic email-based linking. Application-managed MFA is deferred and intended only for local passwords.
 - Configure enabled providers per instance; only configured providers appear on the login screen.
 - Identify OIDC identities by the verified `issuer` and `subject`, not by email address.
 - Maintain stable internal user IDs and separate external identity records. A user may have multiple external identities.
 - Every authenticated user can edit their own display name, contact email, avatar, and appearance. Profile email is not an authentication identifier. Preserve local profile changes across later OIDC sign-ins. Appearance is stored per account; default to a green accent and white background and reset to defaults on logout.
-- Organization settings (`/admin/settings`) is available only to application administrators, with Organization, Users, and Bots tabs. The Users overview includes inactive/pending human accounts, application Admin/Member designation, editable role/status, and last successful OIDC sign-in; API/token requests do not count as sign-ins. Project Owner does not grant organization settings access.
+- Organization settings (`/admin/settings`) is available only to application administrators, with Organization, Users, and Bots tabs. The Users overview includes inactive/pending human accounts, application Admin/Member designation, editable role/status, and last successful browser sign-in; API/token requests do not count as sign-ins. Project Owner does not grant organization settings access.
 - Never automatically merge accounts by matching email. Linking an identity requires an authenticated user and verification of the additional identity.
 - Handle login in the backend and use server-side sessions with secure, HttpOnly cookies. Use state, nonce, and PKCE for the applicable authorization flow.
 - Manage organization roles and project permissions in the tracker.
@@ -44,6 +46,7 @@ The first development increment is implemented: FastAPI/Vue skeleton, PostgreSQL
 
 ## Initial Functional Scope
 
+- Ticket email notifications are opt-in via `notifications_enabled`, independent of password login, using the shared SMTP/Fernet configuration. New tickets notify project Owners (including inherited administrators); author, assignee, comment/activity participants, and users mentioned through stable editor links receive updates. Include the actor, deduplicate per user/event, and recheck active human membership and project access before delivery. Queue notifications in the same transaction as the change; see `docs/agent-memory.md` for outbox behavior.
 - Application roles are Admin (API `administrator`) and Member (`member`). Only application admins create projects and manage application users, bots, and organization labels. Organization settings is at the bottom of the sidebar and is admin-only, including Bots.
 - Project roles are Owner (`owner`), Reporter (`reporter`), and Read-only (`read-only`). Owner manages project settings, memberships, and local labels; Reporter contributes to tickets and comments; Read-only browses tickets. Members without explicit project roles cannot see the project, regardless of the legacy visibility field. Application admins are automatic permanent owners of every project and cannot be removed or demoted by project membership operations. Use API-provided `can_manage` for project settings and enforce it in backend endpoints.
 - Work items with project-scoped identifiers such as `APP-123`, title, visually edited description (stored as Markdown), type, status, priority, assignee, due date, labels, and milestone.

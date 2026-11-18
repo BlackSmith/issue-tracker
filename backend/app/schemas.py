@@ -27,6 +27,7 @@ class ProfileUpdate(BaseModel):
     email: str = Field(min_length=1, max_length=320)
     theme_accent: ThemeAccent = "green"
     theme_background: ThemeBackground = "white"
+    language: Literal["en", "cs"] | None = None
 
     @field_validator("name")
     @classmethod

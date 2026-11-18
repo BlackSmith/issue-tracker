@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 import type { User } from './types'
 import { applyTheme } from './theme.ts'
+import { setLanguage, t, validationMessage } from './i18n.ts'
 
 export const auth = reactive({ user: null as User | null, csrf: '', ready: false })
 let authRefresh: Promise<void> | undefined
@@ -20,10 +21,10 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (options.method && options.method !== 'GET') headers.set('X-CSRF-Token', auth.csrf)
   const response = await fetch(`/api/v1${path}`, { ...options, headers, credentials: 'same-origin' })
   if (!response.ok) {
-    let message = `Request failed (${response.status})`
+    let message = t('Request failed ({status})', { status: response.status })
     try {
       const result = await response.json()
-      message = typeof result.detail === 'string' ? result.detail : result.detail?.map((e: { msg: string }) => e.msg).join('; ') || message
+      message = typeof result.detail === 'string' ? result.detail : result.detail?.map(validationMessage).join('; ') || message
     } catch { /* Keep the status message for non-JSON errors. */ }
     if (path !== '/auth/me' && !headers.has('Authorization')) await reconcileAuthFailure(response.status, message)
     throw new ApiError(response.status, message)
@@ -36,6 +37,7 @@ export function refreshAuth(): Promise<void> {
     authRefresh = api<{ user: User | null; csrf_token: string }>('/auth/me').then(result => {
       auth.user = result.user
       applyTheme(result.user)
+      if (result.user) setLanguage(result.user.language)
       auth.csrf = result.csrf_token
       auth.ready = true
     }).finally(() => { authRefresh = undefined })

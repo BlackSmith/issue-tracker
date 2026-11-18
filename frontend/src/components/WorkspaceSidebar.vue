@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { auth } from '../api'
 import type { Project } from '../types'
+import { t } from '../i18n'
 
 defineProps<{ projects: Project[]; projectId?: string; loading?: boolean; canCreateProject?: boolean; settingsActive?: boolean }>()
 const emit = defineEmits<{ createProject: [] }>()
@@ -8,12 +9,12 @@ const emit = defineEmits<{ createProject: [] }>()
 
 <template>
   <aside class="sidebar">
-    <div class="sidebar-heading">WORKSPACE</div>
-    <div class="sidebar-heading project-heading">PROJECTS <PButton v-if="canCreateProject" class="quiet" @click="emit('createProject')" aria-label="Create project">+</PButton></div>
-    <nav aria-label="Projects"><RouterLink v-for="p in projects" :key="p.id" :to="`/${p.slug}/`" class="project-link" :class="{ active: p.id === projectId }"><span class="project-icon">{{ p.key.slice(0, 2) }}</span><span>{{ p.name }}<small>{{ p.visibility === 'private' ? 'Private project' : p.key }}</small></span></RouterLink></nav>
-    <p v-if="!projects.length && !loading" class="sidebar-empty">Your projects will appear here.</p>
-    <RouterLink v-if="auth.user?.role === 'administrator'" to="/admin/settings" class="project-link application-settings-link" :class="{ active: settingsActive }" :aria-current="settingsActive ? 'page' : undefined"><span aria-hidden="true">⚙</span><span>Organization settings</span></RouterLink>
-    <div class="sidebar-footer"><span class="green-dot"></span> Connected to your workspace<a href="/api/v1/docs" target="_blank" rel="noopener">API documentation ↗</a></div>
+    <div class="sidebar-heading">{{ t('WORKSPACE') }}</div>
+    <div class="sidebar-heading project-heading">{{ t('PROJECTS') }} <PButton v-if="canCreateProject" class="quiet" @click="emit('createProject')" :aria-label="t('Create project')">+</PButton></div>
+    <nav :aria-label="t('Projects')"><RouterLink v-for="p in projects" :key="p.id" :to="`/${p.slug}/`" class="project-link" :class="{ active: p.id === projectId }"><span class="project-icon">{{ p.key.slice(0, 2) }}</span><span>{{ p.name }}<small>{{ p.visibility === 'private' ? t('Private project') : p.key }}</small></span></RouterLink></nav>
+    <p v-if="!projects.length && !loading" class="sidebar-empty">{{ t('Your projects will appear here.') }}</p>
+    <RouterLink v-if="auth.user?.role === 'administrator'" to="/admin/settings" class="project-link application-settings-link" :class="{ active: settingsActive }" :aria-current="settingsActive ? 'page' : undefined"><span aria-hidden="true">⚙</span><span>{{ t('Organization settings') }}</span></RouterLink>
+    <div class="sidebar-footer"><span class="green-dot"></span> {{ t('Connected to your workspace') }}<a href="/api/v1/docs" target="_blank" rel="noopener">{{ t('API documentation ↗') }}</a></div>
   </aside>
 </template>
 

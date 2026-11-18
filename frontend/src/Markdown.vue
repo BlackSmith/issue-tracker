@@ -7,12 +7,14 @@ import { api, auth } from './api'
 import { internalTicketTarget, referenceLinkText, storedReference, ticketShorthands } from './referenceSyntax'
 import { loadReference, resolveTicketUrl, type TicketReference } from './references'
 import { referenceBadge } from './referenceRendering'
+import { language, t } from './i18n'
 const props = withDefaults(defineProps<{ text: string; projectId?: string; interactive?: boolean; busy?: boolean }>(), { interactive: false, busy: false })
 const emit = defineEmits<{ toggle: [index: number, checked: boolean] }>()
 const root = ref<HTMLElement | null>(null)
 const router = useRouter()
 let renderVersion = 0
 const html = computed(() => {
+  language.value
   let index = 0
   const marker = crypto.getRandomValues(new Uint32Array(4)).join('-')
   const parser = new Marked({ renderer: {
@@ -27,7 +29,7 @@ const html = computed(() => {
     const task = input.dataset.taskMarker === marker
     input.disabled = !task || !props.interactive || props.busy
     if (task) {
-      input.setAttribute('aria-label', `Checklist item ${Number(input.dataset.checklistIndex) + 1}`)
+      input.setAttribute('aria-label', t('Checklist item {number}', { number: Number(input.dataset.checklistIndex) + 1 }))
     } else {
       delete input.dataset.checklistIndex
     }

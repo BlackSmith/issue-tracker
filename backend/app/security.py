@@ -99,7 +99,7 @@ def resolve_user(request: Request, db: Session) -> User | None:
         db.commit()
     else:
         user = db.get(User, request.session.get("user_id", ""))
-        if user and (not user.active or user.is_bot):
+        if user and (not user.active or user.is_bot or request.session.get("auth_version", 0) != user.auth_version):
             user = None
     request.state.authentication_checked = True
     request.state.authenticated_user = user

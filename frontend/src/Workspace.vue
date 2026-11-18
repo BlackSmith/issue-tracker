@@ -4,12 +4,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, auth } from './api'
 import type { Assignee, LabelDefinition, Project, WorkItem } from './types'
 import LabelBadge from './components/LabelBadge.vue'
+import StatusBadge from './components/StatusBadge.vue'
 import WorkItemFilters, { type FilterKey, type Filters } from './components/WorkItemFilters.vue'
 import ItemDetail from './components/ItemDetail.vue'
 import ProjectSettings from './components/ProjectSettings.vue'
 import NewItem from './components/NewItem.vue'
 import WorkspaceSidebar from './components/WorkspaceSidebar.vue'
 import { defaultStatuses, isDefaultStatusFilter, readFilterValues, statusFilterQuery } from './itemFilters'
+import { dateOnly, itemCount, t } from './i18n'
 
 const route = useRoute(), router = useRouter()
 const projects = ref<Project[]>([]), items = ref<WorkItem[]>([]), total = ref(0)
@@ -32,10 +34,10 @@ const creatingItem = computed(() => route.name === 'new-item')
 const standalone = computed(() => (ticketRoute.value || creatingItem.value) && route.query.view !== 'panel')
 const q = ref(''), status = ref<string[]>([...defaultStatuses]), label = ref<string[]>([]), sort = ref('updated')
 const priority = ref<string[]>([]), type = ref<string[]>([]), assignee = ref<string[]>([]), direction = ref('desc')
-const sortOptions = [
+const sortOptions = computed(() => [
   { label: 'Updated date', value: 'updated' }, { label: 'Created date', value: 'created' },
   { label: 'Title', value: 'title' }, { label: 'Priority', value: 'priority' }, { label: 'Due date', value: 'due_date' },
-]
+].map(option => ({ ...option, label: t(option.label) })))
 const filters = computed<Filters>(() => ({ status: status.value, label: label.value, priority: priority.value, type: type.value, assignee: assignee.value }))
 const hasFilters = computed(() => !!q.value || !isDefaultStatusFilter(status.value) || label.value.length > 0 || priority.value.length > 0 || type.value.length > 0 || assignee.value.length > 0)
 const page = computed(() => Number(route.query.page) || 1)
@@ -168,41 +170,41 @@ function itemCreated(item: WorkItem) {
   <div class="workspace" :class="{ 'with-detail-panel': (itemId || (creatingItem && project)) && !standalone }">
     <WorkspaceSidebar :projects="projects" :project-id="projectId" :loading="loading" :can-create-project="auth.user?.role === 'administrator'" @create-project="showProject = true" />
     <main class="main-content" :class="{ 'standalone-content': standalone }">
-      <PMessage v-if="error" severity="error" closable @close="error = ''">{{ error }}</PMessage>
+      <PMessage v-if="error" severity="error" closable @close="error = ''">{{ t(error) }}</PMessage>
       <template v-if="!standalone">
-        <div class="breadcrumbs">Organization <span>/</span> {{ project?.name || 'Projects' }}</div>
-        <header class="page-heading"><div><span class="eyebrow">{{ project?.key || 'YOUR WORKSPACE' }}</span><h1>Work items <span v-if="project" class="count">{{ total }}</span></h1><p>{{ project?.description || 'Track ideas, move work forward, and keep everyone in the loop.' }}</p></div><div class="heading-actions"><PButton v-if="project?.can_manage" severity="secondary" outlined @click="showSettings = true">⚙ Settings</PButton><PButton v-if="project?.can_write" @click="newItem">＋ New work item</PButton><PButton v-else-if="!projects.length && auth.user?.role === 'administrator'" @click="showProject = true">＋ Create project</PButton></div></header>
+        <div class="breadcrumbs">{{ t('Organization') }} <span>/</span> {{ project?.name || t('Projects') }}</div>
+        <header class="page-heading"><div><span class="eyebrow">{{ project?.key || t('YOUR WORKSPACE') }}</span><h1>{{ t('Work items') }} <span v-if="project" class="count">{{ total }}</span></h1><p>{{ project?.description || t('Track ideas, move work forward, and keep everyone in the loop.') }}</p></div><div class="heading-actions"><PButton v-if="project?.can_manage" severity="secondary" outlined @click="showSettings = true">{{ t('⚙ Settings') }}</PButton><PButton v-if="project?.can_write" @click="newItem">{{ t('＋ New work item') }}</PButton><PButton v-else-if="!projects.length && auth.user?.role === 'administrator'" @click="showProject = true">{{ t('＋ Create project') }}</PButton></div></header>
         <template v-if="project">
           <div class="work-item-toolbar">
             <WorkItemFilters v-model:query="q" :filters="filters" :labels="labels" :assignees="assignees" @change="changeFilter" @search="filter()" />
             <div class="work-item-sort">
-              <PSelect v-model="sort" :options="sortOptions" option-label="label" option-value="value" @change="changeSort" aria-label="Sort work items" />
-              <PButton type="button" severity="secondary" outlined :aria-label="direction === 'asc' ? 'Sort descending' : 'Sort ascending'" :title="direction === 'asc' ? 'Ascending · click to reverse' : 'Descending · click to reverse'" @click="direction = direction === 'asc' ? 'desc' : 'asc'; filter()">{{ direction === 'asc' ? '↑' : '↓' }}</PButton>
+              <PSelect v-model="sort" :options="sortOptions" option-label="label" option-value="value" @change="changeSort" :aria-label="t('Sort work items')" />
+              <PButton type="button" severity="secondary" outlined :aria-label="t(direction === 'asc' ? 'Sort descending' : 'Sort ascending')" :title="t(direction === 'asc' ? 'Ascending · click to reverse' : 'Descending · click to reverse')" @click="direction = direction === 'asc' ? 'desc' : 'asc'; filter()">{{ direction === 'asc' ? '↑' : '↓' }}</PButton>
             </div>
           </div>
-          <div class="list-caption"><span>{{ total }} work {{ total === 1 ? 'item' : 'items' }}</span><PButton v-if="hasFilters" class="quiet" @click="resetFilters">Reset filters</PButton></div>
-          <div v-if="loading" class="empty-state">Loading work items…</div>
-          <section v-else-if="items.length" class="item-list" aria-label="Work items"><RouterLink v-for="item in items" :key="item.id" class="item-row" :to="{ path: item.web_url, query: { ...route.query, view: 'panel' } }"><span class="status-icon" :class="item.status.toLowerCase().replace(' ', '-')">{{ item.status === 'Done' ? '✓' : item.status === 'Canceled' ? '−' : '◉' }}</span><span class="item-info"><strong>{{ item.title }}</strong><span class="item-meta">{{ item.reference }} <span>·</span> {{ item.type }} <span>·</span> {{ item.status }} <span v-if="item.due_date">· Due {{ item.due_date }}</span></span><span v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></span></span><span class="priority" :class="item.priority.toLowerCase()">{{ item.priority }}</span><span class="row-arrow">↗</span></RouterLink></section>
-          <div v-else class="empty-state"><span class="empty-icon">▤</span><h2>{{ hasFilters ? 'No matching work items' : 'No active work items' }}</h2><p>{{ hasFilters ? 'Try adjusting your filters or search terms.' : 'Done and canceled work items are hidden by default. Change the status filter to see them, or create a new work item.' }}</p><PButton v-if="project.can_write && !hasFilters" @click="newItem">Create work item</PButton></div>
+          <div class="list-caption"><span>{{ itemCount(total) }}</span><PButton v-if="hasFilters" class="quiet" @click="resetFilters">{{ t('Reset filters') }}</PButton></div>
+          <div v-if="loading" class="empty-state">{{ t('Loading work items…') }}</div>
+          <section v-else-if="items.length" class="item-list" :aria-label="t('Work items')"><RouterLink v-for="item in items" :key="item.id" class="item-row" :to="{ path: item.web_url, query: { ...route.query, view: 'panel' } }"><StatusBadge :status="item.status" icon-only /><span class="item-info"><strong>{{ item.title }}</strong><span class="item-meta">{{ item.reference }} <span>·</span> {{ t(item.type) }} <span>·</span> {{ t(item.status) }} <span v-if="item.due_date">· {{ t('Due') }} {{ dateOnly(item.due_date) }}</span></span><span v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></span></span><span class="priority" :class="item.priority.toLowerCase()">{{ t(item.priority) }}</span><span class="row-arrow">↗</span></RouterLink></section>
+          <div v-else class="empty-state"><span class="empty-icon">▤</span><h2>{{ t(hasFilters ? 'No matching work items' : 'No active work items') }}</h2><p>{{ t(hasFilters ? 'Try adjusting your filters or search terms.' : 'Done and canceled work items are hidden by default. Change the status filter to see them, or create a new work item.') }}</p><PButton v-if="project.can_write && !hasFilters" @click="newItem">{{ t('Create work item') }}</PButton></div>
           <Paginator v-if="total > 25" :first="(page - 1) * 25" :rows="25" :total-records="total" @page="router.push({ query: { ...route.query, page: $event.page + 1 } })" />
         </template>
-        <div v-else-if="!loading" class="empty-state"><span class="empty-icon">▦</span><h2>{{ hasProjectRoute ? 'Project not found' : 'Welcome to your workspace' }}</h2><p>{{ hasProjectRoute ? 'This project does not exist or you do not have access to it.' : auth.user?.role === 'administrator' ? 'A project brings your team’s work together. Create one to get started.' : 'Ask an application admin or project owner to grant you access to a project.' }}</p></div>
+        <div v-else-if="!loading" class="empty-state"><span class="empty-icon">▦</span><h2>{{ t(hasProjectRoute ? 'Project not found' : 'Welcome to your workspace') }}</h2><p>{{ t(hasProjectRoute ? 'This project does not exist or you do not have access to it.' : auth.user?.role === 'administrator' ? 'A project brings your team’s work together. Create one to get started.' : 'Ask an application admin or project owner to grant you access to a project.') }}</p></div>
       </template>
-      <div v-if="ticketRoute && !itemId && loading" class="empty-state">Loading work item…</div>
+      <div v-if="ticketRoute && !itemId && loading" class="empty-state">{{ t('Loading work item…') }}</div>
       <ItemDetail v-if="itemId" :key="itemId" :item-id="itemId" :can-write="project?.can_write || false" :standalone="standalone" @close="closeItem" @updated="load" />
       <NewItem v-if="creatingItem && project" :key="project.id" :project="project" :standalone="standalone" @close="closeItem" @toggle-view="setCreationView" @created="itemCreated" />
-      <div v-else-if="creatingItem && standalone" class="empty-state"><h2>{{ loading ? 'Loading project…' : 'Project not found' }}</h2><p v-if="!loading">This project does not exist or you do not have access to it.</p></div>
+      <div v-else-if="creatingItem && standalone" class="empty-state"><h2>{{ t(loading ? 'Loading project…' : 'Project not found') }}</h2><p v-if="!loading">{{ t('This project does not exist or you do not have access to it.') }}</p></div>
     </main>
   </div>
 
-  <PDialog v-model:visible="showProject" modal header="Create a project" :closable="!busy" :dismissable-mask="!busy">
+  <PDialog v-model:visible="showProject" modal :header="t('Create a project')" :closable="!busy" :dismissable-mask="!busy">
       <form @submit.prevent="createProject">
-        <label>Project name<InputText v-model="projectForm.name" required maxlength="150" autofocus placeholder="e.g. Product development" :disabled="busy" /></label>
-        <label>Project key<InputText v-model="projectForm.key" required pattern="[A-Z][A-Z0-9]{1,9}" maxlength="10" placeholder="APP" :disabled="busy" @update:model-value="projectForm.key = projectForm.key.toUpperCase()" /><small>2–10 uppercase letters or numbers, starting with a letter.</small></label>
-        <p class="hint">Project URL: /{{ projectForm.key || 'KEY' }}/ · Ticket URL: /{{ projectForm.key || 'KEY' }}/123</p>
-        <label>Description<PTextarea v-model="projectForm.description" rows="3" :disabled="busy" /></label>
-        <p class="hint">Only assigned project members and application admins can access this project.</p>
-        <PMessage v-if="error" severity="error">{{ error }}</PMessage><footer><PButton type="button" severity="secondary" outlined :disabled="busy" @click="showProject = false">Cancel</PButton><PButton type="submit" :loading="busy" :disabled="busy">Create project</PButton></footer>
+        <label>{{ t('Project name') }}<InputText v-model="projectForm.name" required maxlength="150" autofocus :placeholder="t('e.g. Product development')" :disabled="busy" /></label>
+        <label>{{ t('Project key') }}<InputText v-model="projectForm.key" required pattern="[A-Z][A-Z0-9]{1,9}" maxlength="10" placeholder="APP" :disabled="busy" @update:model-value="projectForm.key = projectForm.key.toUpperCase()" /><small>{{ t('2–10 uppercase letters or numbers, starting with a letter.') }}</small></label>
+        <p class="hint">{{ t('Project URL') }}: /{{ projectForm.key || 'KEY' }}/ · {{ t('Ticket URL') }}: /{{ projectForm.key || 'KEY' }}/123</p>
+        <label>{{ t('Description') }}<PTextarea v-model="projectForm.description" rows="3" :disabled="busy" /></label>
+        <p class="hint">{{ t('Only assigned project members and application admins can access this project.') }}</p>
+        <PMessage v-if="error" severity="error">{{ t(error) }}</PMessage><footer><PButton type="button" severity="secondary" outlined :disabled="busy" @click="showProject = false">{{ t('Cancel') }}</PButton><PButton type="submit" :loading="busy" :disabled="busy">{{ t('Create project') }}</PButton></footer>
       </form>
   </PDialog>
   <ProjectSettings v-if="showSettings && project?.can_manage" :key="project.id" :project="project" @close="showSettings = false" @labels-updated="load" @permissions-updated="load" @updated="updated => projects = projects.map(p => p.id === updated.id ? updated : p)" />

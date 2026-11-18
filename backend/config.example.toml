@@ -1,0 +1,33 @@
+# Select this file with TRACKER_CONFIG=/absolute/path/to/config.toml.
+# Environment variables override TOML values. Never commit real credentials.
+app_base_url = "https://tracker.example.com"
+api_base_url = "https://tracker.example.com"
+cookie_secure = true
+password_enabled = true
+notifications_enabled = true
+invitation_ttl = 86400
+password_reset_ttl = 3600
+smtp_host = "smtp.example.com"
+smtp_port = 587
+smtp_security = "starttls"
+smtp_from = "Issue Tracker <tracker@example.com>"
+# Supply SMTP_USERNAME, SMTP_PASSWORD, and MAIL_ENCRYPTION_KEY in the environment.
+# Generate MAIL_ENCRYPTION_KEY with:
+# .venv/bin/python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+
+[[providers]]
+id = "company"
+name = "Company SSO"
+type = "oidc"
+issuer = "https://identity.example.com/realms/company"
+client_id = "issue-tracker"
+client_secret = ""
+# For confidential clients, use client_secret_env = "COMPANY_CLIENT_SECRET".
+
+[[providers]]
+id = "facebook"
+name = "Facebook"
+type = "facebook"
+client_id = "replace-with-meta-app-id"
+client_secret_env = "FACEBOOK_CLIENT_SECRET"
+graph_version = "v24.0"

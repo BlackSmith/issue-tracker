@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { api } from './api'
 import type { UserReference } from './references'
 import UserAvatar from './components/UserAvatar.vue'
+import { t } from './i18n'
 
 const route = useRoute()
 const person = ref<UserReference | null>(null), error = ref('')
@@ -20,10 +21,10 @@ watch(() => route.params.userId, async id => {
 
 <template>
   <main class="public-profile">
-    <RouterLink to="/">← Back to workspace</RouterLink>
-    <section v-if="person" class="profile-card"><UserAvatar :name="person.name" :src="person.avatar_url" /><div><span class="eyebrow">{{ person.is_bot ? 'BOT ACCOUNT' : 'TEAM MEMBER' }}</span><h1>{{ person.name }}</h1><p>{{ person.role }}</p></div></section>
-    <p v-else-if="error" class="error" role="alert">{{ error }}</p>
-    <p v-else class="hint">Loading profile…</p>
+    <RouterLink to="/">{{ t('← Back to workspace') }}</RouterLink>
+    <section v-if="person" class="profile-card"><UserAvatar :name="person.name" :src="person.avatar_url" /><div><span class="eyebrow">{{ t(person.is_bot ? 'BOT ACCOUNT' : 'TEAM MEMBER') }}</span><h1>{{ person.name }}</h1><p>{{ t(person.role) }}</p></div></section>
+    <p v-else-if="error" class="error" role="alert">{{ t(error) }}</p>
+    <p v-else class="hint">{{ t('Loading profile…') }}</p>
   </main>
 </template>
 

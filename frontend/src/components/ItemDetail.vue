@@ -8,6 +8,9 @@ import { itemTypes, priorities, statuses } from '../types'
 import Markdown from '../Markdown.vue'
 import UserAvatar from './UserAvatar.vue'
 import ItemField from './ItemField.vue'
+import StatusBadge from './StatusBadge.vue'
+import { dateOnly, dateTime, t } from '../i18n'
+import { activityText } from '../activity'
 const RichTextEditor = defineAsyncComponent(() => import('./RichTextEditor.vue'))
 
 const props = defineProps<{ itemId: string; canWrite: boolean; standalone: boolean }>()
@@ -50,9 +53,9 @@ async function copyLink() {
 const assignees = ref<Assignee[]>([]), assigneesReady = ref(false)
 const labels = ref<LabelDefinition[]>([]), labelsReady = ref(false)
 const assigneeOptions = computed(() => {
-  const options: { value: string; label: string; disabled?: boolean }[] = [{ value: '', label: 'Unassigned' }, ...assignees.value.map(user => ({ value: user.id, label: user.name + (user.is_bot ? ' (Bot)' : '') }))]
+  const options: { value: string; label: string; disabled?: boolean }[] = [{ value: '', label: t('Unassigned') }, ...assignees.value.map(user => ({ value: user.id, label: user.name + (user.is_bot ? t(' (Bot)') : '') }))]
   if (item.value?.assignee && !assignees.value.some(user => user.id === item.value?.assignee_id)) {
-    options.push({ value: item.value.assignee.id, label: item.value.assignee.name + ' (no longer assignable)', disabled: true })
+    options.push({ value: item.value.assignee.id, label: item.value.assignee.name + t(' (no longer assignable)'), disabled: true })
   }
   return options
 })
@@ -139,43 +142,43 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
 
 <template>
   <div v-if="!standalone" class="panel-shade" @click="emit('close')"></div>
-  <section class="detail-panel" :class="{ standalone }" :role="standalone ? undefined : 'dialog'" aria-label="Work item detail" @keydown.esc="emit('close')">
-    <header class="detail-top"><div class="detail-reference"><RouterLink v-if="item" :to="item.web_url" title="Open standalone page">{{ headerReference }}</RouterLink><span v-else>Work item</span><PButton v-if="item" class="quiet copy-ticket-link" aria-label="Copy ticket link" :title="copyStatus || 'Copy ticket link'" @click="copyLink"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path v-if="copyStatus === 'Link copied'" d="m5 12 4 4L19 6" /><template v-else><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4" /></template></svg></PButton><span class="sr-only" role="status">{{ copyStatus }}</span></div><div><PButton v-if="item && canWrite && !editingContent" class="quiet detail-edit" :disabled="busy || checklistBusy" aria-label="Edit ticket" @click="editContent">Edit</PButton>
-    <PButton v-if="!standalone && item" type="button" class="quiet detail-fullscreen" aria-label="Open fullscreen" title="Open fullscreen" @click="openFullscreen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 10l7-7m-6 0h6v6M10 14l-7 7m0-6v6h6" /></svg></PButton>
-    <PButton class="quiet" @click="emit('close')" :aria-label="standalone ? 'Back to project' : 'Close detail'">{{ standalone ? '← Back' : '×' }}</PButton></div></header>
-    <div v-if="error" class="error banner" role="alert">{{ error }}</div>
-    <div v-if="!item" class="empty-state">{{ error ? 'Unable to load work item.' : 'Loading work item…' }}</div>
+  <section class="detail-panel" :class="{ standalone }" :role="standalone ? undefined : 'dialog'" :aria-label="t('Work item detail')" @keydown.esc="emit('close')">
+    <header class="detail-top"><div class="detail-reference"><RouterLink v-if="item" :to="item.web_url" :title="t('Open standalone page')">{{ headerReference }}</RouterLink><span v-else>{{ t('Work item') }}</span><PButton v-if="item" class="quiet copy-ticket-link" :aria-label="t('Copy ticket link')" :title="t(copyStatus || 'Copy ticket link')" @click="copyLink"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path v-if="copyStatus === 'Link copied'" d="m5 12 4 4L19 6" /><template v-else><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4" /></template></svg></PButton><span class="sr-only" role="status">{{ t(copyStatus) }}</span></div><div><PButton v-if="item && canWrite && !editingContent" class="quiet detail-edit" :disabled="busy || checklistBusy" :aria-label="t('Edit ticket')" @click="editContent">{{ t('Edit') }}</PButton>
+    <PButton v-if="!standalone && item" type="button" class="quiet detail-fullscreen" :aria-label="t('Open fullscreen')" :title="t('Open fullscreen')" @click="openFullscreen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 10l7-7m-6 0h6v6M10 14l-7 7m0-6v6h6" /></svg></PButton>
+    <PButton class="quiet" @click="emit('close')" :aria-label="t(standalone ? 'Back to project' : 'Close detail')">{{ standalone ? t('← Back') : '×' }}</PButton></div></header>
+    <div v-if="error" class="error banner" role="alert">{{ t(error) }}</div>
+    <div v-if="!item" class="empty-state">{{ t(error ? 'Unable to load work item.' : 'Loading work item…') }}</div>
     <div v-else class="detail-body">
       <h1 v-if="!editingContent">{{ item.title }}</h1>
       <div class="detail-layout">
         <div class="detail-main">
-      <form v-if="editingContent" class="edit-form" aria-label="Edit ticket" @submit.prevent="saveContent" @keydown.esc.stop.prevent="cancelContent">
-        <label>Title<InputText ref="titleInput" v-model="contentDraft.title" required maxlength="250" :disabled="busy" /></label>
-        <div class="editor-field"><span class="editor-field-label">Description</span><RichTextEditor v-model="contentDraft.description" label="Description" :item-id="itemId" :project-id="item.project_id" :disabled="busy" @uploading="descriptionUploading = $event" @uploaded="refreshAttachments" /></div>
-        <footer><PButton type="button" severity="secondary" outlined :disabled="busy || descriptionUploading" @click="cancelContent">Cancel</PButton><PButton type="submit" :disabled="busy || checklistBusy || descriptionUploading">Save changes</PButton></footer>
+      <form v-if="editingContent" class="edit-form" :aria-label="t('Edit ticket')" @submit.prevent="saveContent" @keydown.esc.stop.prevent="cancelContent">
+        <label>{{ t('Title') }}<InputText ref="titleInput" v-model="contentDraft.title" required maxlength="250" :disabled="busy" /></label>
+        <div class="editor-field"><span class="editor-field-label">{{ t('Description') }}</span><RichTextEditor v-model="contentDraft.description" :label="t('Description')" :item-id="itemId" :project-id="item.project_id" :disabled="busy" @uploading="descriptionUploading = $event" @uploaded="refreshAttachments" /></div>
+        <footer><PButton type="button" severity="secondary" outlined :disabled="busy || descriptionUploading" @click="cancelContent">{{ t('Cancel') }}</PButton><PButton type="submit" :disabled="busy || checklistBusy || descriptionUploading">{{ t('Save changes') }}</PButton></footer>
       </form>
-      <template v-else><Markdown v-if="item.description" :text="item.description" :project-id="item.project_id" :interactive="canWrite" :busy="busy || checklistBusy" @toggle="(index, checked) => toggleChecklist(index, checked)" /><p v-else class="muted">No description yet.</p></template>
-      <p v-if="checklistBusy" class="hint" role="status">Saving checklist…</p>
-      <section v-if="attachments.length" class="attachments"><h3>Attachments <span class="count">{{ attachments.length }}</span></h3><a v-for="a in attachments" :key="a.id" :href="a.url" target="_blank" rel="noopener">↳ {{ a.filename }} <small>{{ Math.max(1, Math.round(a.size / 1024)) }} KB</small></a></section>
+      <template v-else><Markdown v-if="item.description" :text="item.description" :project-id="item.project_id" :interactive="canWrite" :busy="busy || checklistBusy" @toggle="(index, checked) => toggleChecklist(index, checked)" /><p v-else class="muted">{{ t('No description yet.') }}</p></template>
+      <p v-if="checklistBusy" class="hint" role="status">{{ t('Saving checklist…') }}</p>
+      <section v-if="attachments.length" class="attachments"><h3>{{ t('Attachments') }} <span class="count">{{ attachments.length }}</span></h3><a v-for="a in attachments" :key="a.id" :href="a.url" target="_blank" rel="noopener">↳ {{ a.filename }} <small>{{ Math.max(1, Math.round(a.size / 1024)) }} KB</small></a></section>
       <section class="discussion">
-        <h2>Activity</h2>
-        <div v-for="entry in discussion" :key="entry.id" class="discussion-entry" :class="entry.kind"><UserAvatar :name="entry.author" :src="entry.avatar_url" /><div class="discussion-content"><header><strong>{{ entry.author }}</strong><span v-if="entry.author_is_bot" class="bot-badge">Bot</span><time>{{ new Date(entry.created_at).toLocaleString() }}</time></header><Markdown v-if="entry.kind === 'comment'" :text="entry.body" :project-id="item.project_id" :interactive="canWrite && !editingContent" :busy="busy || checklistBusy" @toggle="(index, checked) => toggleChecklist(index, checked, entry)" /><p v-else>{{ entry.body }}</p></div></div>
+        <h2>{{ t('Activity') }}</h2>
+        <div v-for="entry in discussion" :key="entry.id" class="discussion-entry" :class="entry.kind"><UserAvatar :name="entry.author" :src="entry.avatar_url" /><div class="discussion-content"><header><strong>{{ entry.author }}</strong><span v-if="entry.author_is_bot" class="bot-badge">{{ t('Bot') }}</span><time>{{ dateTime(entry.created_at) }}</time></header><Markdown v-if="entry.kind === 'comment'" :text="entry.body" :project-id="item.project_id" :interactive="canWrite && !editingContent" :busy="busy || checklistBusy" @toggle="(index, checked) => toggleChecklist(index, checked, entry)" /><p v-else>{{ activityText(entry.body) }}</p></div></div>
         <form v-if="canWrite" class="comment-form rich-comment-form" @submit.prevent="addComment">
-          <RichTextEditor v-model="comment" label="Comment" placeholder="Leave a comment…" :item-id="itemId" :project-id="item.project_id" :disabled="busy"
+          <RichTextEditor v-model="comment" :label="t('Comment')" :placeholder="t('Leave a comment…')" :item-id="itemId" :project-id="item.project_id" :disabled="busy"
             @uploading="commentUploading = $event" @uploaded="refreshAttachments" />
-          <footer><PButton type="submit" :loading="busy" :disabled="busy || commentUploading || checklistBusy || !comment.trim()">Add comment</PButton></footer>
+          <footer><PButton type="submit" :loading="busy" :disabled="busy || commentUploading || checklistBusy || !comment.trim()">{{ t('Add comment') }}</PButton></footer>
         </form>
-        <p v-else class="hint">You have read-only access to this project.</p>
+        <p v-else class="hint">{{ t('You have read-only access to this project.') }}</p>
       </section>
         </div>
-        <aside class="detail-metadata" aria-label="Work item metadata">
-          <section><ItemField label="Status" kind="select" :value="item.status" :options="statuses" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('status', value)" @editing="error = ''"><span class="status-badge" :class="item.status.toLowerCase().replace(' ', '-')">{{ item.status }}</span></ItemField></section>
-          <section><ItemField label="Type" kind="select" :value="item.type" :options="itemTypes" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('type', value)" @editing="error = ''"><span>{{ item.type }}</span></ItemField></section>
-          <section><ItemField label="Priority" kind="select" :value="item.priority" :options="priorities" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('priority', value)" @editing="error = ''"><span class="priority" :class="item.priority.toLowerCase()">{{ item.priority }}</span></ItemField></section>
-          <section><ItemField label="Due date" kind="date" :value="item.due_date || ''" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('due_date', value)" @editing="error = ''"><span>{{ item.due_date || 'Not set' }}</span></ItemField></section>
-          <section><ItemField label="Labels" kind="labels" :value="JSON.stringify(item.labels)" :label-definitions="labels" :can-write="canWrite" :disabled="busy || checklistBusy || !labelsReady" :save="value => saveField('labels', value)" @editing="error = ''"><div v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></div><span v-else class="muted">None</span></ItemField></section>
-          <section><ItemField label="Assignee" kind="select" :value="item.assignee_id || ''" :options="assigneeOptions" :can-write="canWrite" :disabled="busy || checklistBusy || !assigneesReady" :save="value => saveField('assignee_id', value)" @editing="error = ''"><span v-if="item.assignee" class="assignee-value"><UserAvatar :name="item.assignee.name" :src="item.assignee.avatar_url" /><span>{{ item.assignee.name }} <span v-if="item.assignee.is_bot" class="bot-badge">Bot</span></span></span><span v-else class="muted">Unassigned</span></ItemField></section>
-          <section><h3>Participants <span class="count">{{ participants.length }}</span></h3><div v-if="participants.length" class="detail-participants"><span v-for="participant in participants" :key="participant.author" :title="participant.author"><UserAvatar :name="participant.author" :src="participant.avatar_url" /></span></div><span v-else class="muted">None</span></section>
+        <aside class="detail-metadata" :aria-label="t('Work item metadata')">
+          <section><ItemField :label="t('Status')" kind="status" :value="item.status" :options="statuses" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('status', value)" @editing="error = ''"><StatusBadge :status="item.status" /></ItemField></section>
+          <section><ItemField :label="t('Type')" kind="select" :value="item.type" :options="itemTypes" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('type', value)" @editing="error = ''"><span>{{ t(item.type) }}</span></ItemField></section>
+          <section><ItemField :label="t('Priority')" kind="select" :value="item.priority" :options="priorities" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('priority', value)" @editing="error = ''"><span class="priority" :class="item.priority.toLowerCase()">{{ t(item.priority) }}</span></ItemField></section>
+          <section><ItemField :label="t('Due date')" kind="date" :value="item.due_date || ''" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('due_date', value)" @editing="error = ''"><span>{{ item.due_date ? dateOnly(item.due_date) : t('Not set') }}</span></ItemField></section>
+          <section><ItemField :label="t('Labels')" kind="labels" :value="JSON.stringify(item.labels)" :label-definitions="labels" :can-write="canWrite" :disabled="busy || checklistBusy || !labelsReady" :save="value => saveField('labels', value)" @editing="error = ''"><div v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></div><span v-else class="muted">{{ t('None') }}</span></ItemField></section>
+          <section><ItemField :label="t('Assignee')" kind="select" :value="item.assignee_id || ''" :options="assigneeOptions" :can-write="canWrite" :disabled="busy || checklistBusy || !assigneesReady" :save="value => saveField('assignee_id', value)" @editing="error = ''"><span v-if="item.assignee" class="assignee-value"><UserAvatar :name="item.assignee.name" :src="item.assignee.avatar_url" /><span>{{ item.assignee.name }} <span v-if="item.assignee.is_bot" class="bot-badge">{{ t('Bot') }}</span></span></span><span v-else class="muted">{{ t('Unassigned') }}</span></ItemField></section>
+          <section><h3>{{ t('Participants') }} <span class="count">{{ participants.length }}</span></h3><div v-if="participants.length" class="detail-participants"><span v-for="participant in participants" :key="participant.author" :title="participant.author"><UserAvatar :name="participant.author" :src="participant.avatar_url" /></span></div><span v-else class="muted">{{ t('None') }}</span></section>
         </aside>
       </div>
     </div>

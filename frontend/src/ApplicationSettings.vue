@@ -5,6 +5,7 @@ import { api, auth } from './api'
 import type { Project } from './types'
 import LabelManager from './components/LabelManager.vue'
 import WorkspaceSidebar from './components/WorkspaceSidebar.vue'
+import { t } from './i18n'
 
 const Bots = defineAsyncComponent(() => import('./Bots.vue'))
 const ApplicationUsers = defineAsyncComponent(() => import('./components/ApplicationUsers.vue'))
@@ -42,22 +43,22 @@ onMounted(async () => {
   <div class="workspace" :class="{ 'with-detail-panel': panelId && auth.user?.role === 'administrator' }">
     <WorkspaceSidebar :projects="projects" :loading="loading" settings-active />
     <main class="main-content application-settings">
-      <div class="breadcrumbs"><RouterLink to="/">Workspace</RouterLink><span>/</span> Organization settings</div>
-      <header class="page-heading"><div><span class="eyebrow">APPLICATION</span><h1>Organization settings</h1><p>Manage application users, organization labels, and automation accounts.</p></div></header>
-      <PMessage v-if="error" severity="error">{{ error }}</PMessage>
+      <div class="breadcrumbs"><RouterLink to="/">{{ t('Workspace') }}</RouterLink><span>/</span> {{ t('Organization settings') }}</div>
+      <header class="page-heading"><div><span class="eyebrow">{{ t('APPLICATION') }}</span><h1>{{ t('Organization settings') }}</h1><p>{{ t('Manage application users, organization labels, and automation accounts.') }}</p></div></header>
+      <PMessage v-if="error" severity="error">{{ t(error) }}</PMessage>
       <PTabs v-if="auth.user?.role === 'administrator'" v-model:value="tab">
-        <PTabList aria-label="Application settings sections">
-          <PTab value="organization">Organization</PTab>
-          <PTab value="users">Users</PTab>
-          <PTab value="bots">Bots</PTab>
+        <PTabList :aria-label="t('Application settings sections')">
+          <PTab value="organization">{{ t('Organization') }}</PTab>
+          <PTab value="users">{{ t('Users') }}</PTab>
+          <PTab value="bots">{{ t('Bots') }}</PTab>
         </PTabList>
         <PTabPanels>
-          <PTabPanel value="organization"><h2>Labels</h2><LabelManager v-if="tab === 'organization'" :panel-id="panelId" @open="openPanel" @close="closePanel" /></PTabPanel>
+          <PTabPanel value="organization"><h2>{{ t('Labels') }}</h2><LabelManager v-if="tab === 'organization'" :panel-id="panelId" @open="openPanel" @close="closePanel" /></PTabPanel>
           <PTabPanel value="users"><ApplicationUsers v-if="tab === 'users'" :panel-id="panelId" @open="openPanel" @close="closePanel" /></PTabPanel>
           <PTabPanel value="bots"><Bots v-if="tab === 'bots'" embedded :panel-id="panelId" @open="openPanel" @close="closePanel" /></PTabPanel>
         </PTabPanels>
       </PTabs>
-      <PMessage v-else severity="error">Administrator access required.</PMessage>
+      <PMessage v-else severity="error">{{ t('Administrator access required.') }}</PMessage>
     </main>
   </div>
 </template>

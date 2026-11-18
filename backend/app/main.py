@@ -11,6 +11,9 @@ from uuid import UUID
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
+from starlette.responses import JSONResponse
 from pydantic import Field
 from sqlalchemy import and_, case, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -23,7 +26,10 @@ from app.db import get_db
 from app.labels import available_labels, label_json, lock_catalog, validate_labels
 from app.models import (Activity, Attachment, Comment, ExternalIdentity, Project,
                         ProjectMember, User, WorkItem, Label, new_id, utcnow)
-from app.providers import OIDCProvider
+from app.providers import OIDCProvider, FacebookProvider
+from app.passwords import router as passwords_router, establish_session, auth_details
+from app.mail import mail_loop
+from app.notifications import enqueue_notification
 from app.profiles import avatar_url, profile_json, router as profile_router
 from app.references import router as references_router
 from app.tokens import router as tokens_router
@@ -37,13 +43,20 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app):
     app.state.provider = OIDCProvider(settings) if settings.oidc_issuer and settings.oidc_client_id else None
+    app.state.providers = {p.id: (FacebookProvider(settings, p) if p.type == "facebook" else
+                                 OIDCProvider(settings) if p.id == "oidc" and not settings.providers else OIDCProvider(settings, p))
+                           for p in settings.configured_providers()}
     cleanup = asyncio.create_task(cleanup_loop())
+    mail = asyncio.create_task(mail_loop())
     try:
         yield
     finally:
         cleanup.cancel()
+        mail.cancel()
         with suppress(asyncio.CancelledError):
             await cleanup
+        with suppress(asyncio.CancelledError):
+            await mail
 
 
 app = FastAPI(title="Issue Tracker API", version="0.1.0", lifespan=lifespan,
@@ -53,7 +66,17 @@ app.include_router(profile_router)
 app.include_router(references_router)
 app.include_router(tokens_router)
 app.include_router(bots_router)
+app.include_router(passwords_router)
 api = "/api/v1"
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith(api + "/auth/password/"):
+        # Pydantic's default errors echo inputs, which can contain passwords or setup secrets.
+        return JSONResponse(status_code=422, content={"detail": [
+            {key: error[key] for key in ("loc", "msg", "type")} for error in exc.errors()]})
+    return await request_validation_exception_handler(request, exc)
 
 
 def can_manage_project(user, member):
@@ -126,7 +149,10 @@ def health():
 
 @app.get(api + "/auth/providers", tags=["Authentication"])
 def providers():
-    return [{"id": "oidc", "name": settings.oidc_name, "url": api + "/auth/oidc/login"}] if settings.oidc_issuer and settings.oidc_client_id else []
+    result = [{"id": p.id, "name": p.name, "url": api + f"/auth/{p.id}/login"} for p in settings.configured_providers()]
+    if settings.password_enabled:
+        result.append({"id": "password", "name": "Email and password", "url": None})
+    return result
 
 
 @app.get(api + "/auth/me", tags=["Authentication"])
@@ -139,23 +165,25 @@ def me(request: Request, user: User | None = Depends(maybe_user)):
             "auth_method": "token" if token else "session", "token_scopes": token.scopes if token else None}
 
 
-@app.get(api + "/auth/oidc/login", tags=["Authentication"])
-async def login(request: Request):
+@app.get(api + "/auth/{provider_id}/login", tags=["Authentication"])
+async def login(provider_id: str, request: Request):
     if "authorization" in request.headers:
         raise HTTPException(403, "Use the browser login flow without an API token")
-    if not app.state.provider:
+    provider = app.state.provider if provider_id == "oidc" and not settings.providers else getattr(app.state, "providers", {}).get(provider_id)
+    if not provider:
         raise HTTPException(404, "Provider is not configured")
-    return await app.state.provider.authorize(request)
+    return await provider.authorize(request)
 
 
-@app.get(api + "/auth/oidc/callback", tags=["Authentication"])
-async def callback(request: Request, db: Session = Depends(get_db)):
+@app.get(api + "/auth/{provider_id}/callback", tags=["Authentication"])
+async def callback(provider_id: str, request: Request, db: Session = Depends(get_db)):
     if "authorization" in request.headers:
         raise HTTPException(403, "API tokens cannot create browser sessions")
-    if not app.state.provider:
+    provider = app.state.provider if provider_id == "oidc" and not settings.providers else getattr(app.state, "providers", {}).get(provider_id)
+    if not provider:
         raise HTTPException(404, "Provider is not configured")
     try:
-        profile = await app.state.provider.identity(request)
+        profile = await provider.identity(request)
     except Exception as exc:
         logging.getLogger(__name__).warning("OIDC authentication rejected (%s)", type(exc).__name__)
         return RedirectResponse(settings.app_base_url + "/?auth_error=1", status_code=303)
@@ -169,15 +197,14 @@ async def callback(request: Request, db: Session = Depends(get_db)):
         db.flush()
         db.add(ExternalIdentity(user_id=user.id, issuer=profile.issuer, subject=profile.subject))
         db.commit()
+    user = db.scalar(select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True))
     if not user.active:
         raise HTTPException(403, "Account disabled")
     if user.is_bot:
         raise HTTPException(403, "Bot accounts cannot sign in through OIDC")
     user.last_login_at = utcnow()
     db.commit()
-    request.session.clear()
-    request.session.update(user_id=user.id, csrf=secrets.token_urlsafe(32))
-    request.state.rotate_session = True
+    establish_session(request, user)
     return RedirectResponse(settings.app_base_url, status_code=303)
 
 
@@ -238,7 +265,8 @@ def application_users(user: User = Depends(organization_user), db: Session = Dep
         raise HTTPException(403, "Application administrator required")
     return [{"id": target.id, "name": target.name, "email": target.email,
              "role": target.role, "active": target.active, "avatar_url": avatar_url(target) if target.active and target.role else None,
-             "last_login_at": target.last_login_at.replace(tzinfo=target.last_login_at.tzinfo or timezone.utc).isoformat() if target.last_login_at else None}
+             "last_login_at": target.last_login_at.replace(tzinfo=target.last_login_at.tzinfo or timezone.utc).isoformat() if target.last_login_at else None,
+             **auth_details(db, target)}
             for target in db.scalars(select(User).where(User.is_bot.is_(False)).order_by(User.name, User.id))]
 
 
@@ -271,6 +299,8 @@ def update_application_user(user_id: str, payload: ApplicationUserUpdate,
         if not others:
             raise HTTPException(409, "At least one active application administrator is required")
     target.role, target.active = payload.role, payload.active
+    if not payload.active:
+        target.auth_version += 1
     db.commit()
     return {"ok": True}
 
@@ -457,6 +487,7 @@ def create_item(project_id: str, payload: ItemCreate, user: User = Depends(organ
     db.flush()
     confirm_attachments(db, item.description, item, user)
     db.add(Activity(item_id=item.id, author_id=user.id, message="created this work item"))
+    enqueue_notification(db, item, user, "created this work item", created=True)
     db.commit()
     return item_json(item, project)
 
@@ -518,6 +549,7 @@ def update_item(item_id, values, user, db):
     if "description" in values:
         confirm_attachments(db, values["description"], item, user)
     changed = []
+    previous_assignee_id = item.assignee_id
     for key, value in values.items():
         if getattr(item, key) != value:
             if key == "assignee_id":
@@ -533,6 +565,8 @@ def update_item(item_id, values, user, db):
     if changed:
         item.updated_at = utcnow()
         db.add(Activity(item_id=item.id, author_id=user.id, message="updated " + ", ".join(changed)))
+        enqueue_notification(db, item, user, "updated " + ", ".join(changed),
+                             previous_assignee_id=previous_assignee_id)
     db.commit()
     return item_json(item, project)
 
@@ -556,6 +590,7 @@ def change_checklist(db: Session, user: User, item: WorkItem, task_index: int,
         action = "checked" if payload.checked else "unchecked"
         db.add(Activity(item_id=item.id, author_id=user.id,
                         message=f'{action} checklist item #{task_index + 1} "{label}" in {source}'))
+        enqueue_notification(db, item, user, f'{action} checklist item #{task_index + 1} "{label}" in {source}')
         db.commit()
     return {"text": updated, "version": content_version(updated), "changed": changed}
 
@@ -603,6 +638,7 @@ def comment(item_id: str, payload: CommentCreate, user: User = Depends(organizat
     confirm_attachments(db, payload.body, item, user)
     item.updated_at = utcnow()
     db.add(row)
+    enqueue_notification(db, item, user, "added a comment")
     db.commit()
     return {"id": row.id}
 
@@ -637,6 +673,7 @@ async def store_attachment(db, file, user, project_id, item_id, pending):
         db.add(attachment)
         if not pending:
             db.add(Activity(item_id=item_id, author_id=user.id, message="uploaded " + filename))
+            enqueue_notification(db, db.get(WorkItem, item_id), user, "uploaded " + filename)
         db.commit()
     except BaseException:
         db.rollback()

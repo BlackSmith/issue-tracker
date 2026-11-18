@@ -25,7 +25,8 @@ def test_application_users_include_inactive_and_pending_but_not_bots(env):
     assert rows[people['reader']]['active'] is False
     assert rows[people['member']]['last_login_at'] == recorded.isoformat()
     assert rows[people['administrator']]['last_login_at'] is None
-    assert set(rows[people['member']]) == {'id', 'name', 'email', 'role', 'active', 'avatar_url', 'last_login_at'}
+    assert set(rows[people['member']]) == {'id', 'name', 'email', 'role', 'active', 'avatar_url', 'last_login_at',
+                                         'login_method', 'login_email', 'password_set', 'mail_status'}
 
 
 def test_user_overview_is_for_application_admins_not_project_admins(env):

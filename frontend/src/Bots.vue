@@ -5,6 +5,7 @@ import type { BotAccount, BotProject, Project } from './types'
 import TokenManager from './components/TokenManager.vue'
 import UserAvatar from './components/UserAvatar.vue'
 import SettingsDetailPanel from './components/SettingsDetailPanel.vue'
+import { t } from './i18n'
 
 const props = defineProps<{ embedded?: boolean; panelId?: string }>()
 const emit = defineEmits<{ open: [id: string, replace?: boolean]; close: [] }>()
@@ -117,37 +118,37 @@ async function removeProject(id: string) {
 
 <template>
   <component :is="embedded ? 'section' : 'main'" class="bots-page" :class="{ 'bots-embedded': embedded }">
-    <div v-if="!embedded" class="breadcrumbs"><RouterLink to="/">Workspace</RouterLink><span>/</span> Bot accounts</div>
-    <p v-if="auth.user?.role !== 'administrator'" class="error" role="alert">Administrator access is required.</p>
+    <div v-if="!embedded" class="breadcrumbs"><RouterLink to="/">{{ t('Workspace') }}</RouterLink><span>/</span> {{ t('Bot accounts') }}</div>
+    <p v-if="auth.user?.role !== 'administrator'" class="error" role="alert">{{ t('Administrator access is required.') }}</p>
     <template v-else>
-      <header class="page-heading"><div><h2>Bot accounts</h2><p>Give automations and AI tools their own identity and project access.</p></div><PButton type="button" :disabled="busy" @click="emit('open', 'new')">Create bot</PButton></header>
-      <PMessage v-if="error && !panelId" severity="error">{{ error }}</PMessage>
-      <InputText v-model="search" type="search" class="bot-search" placeholder="Search bots…" aria-label="Search bots" />
-      <DataTable :value="filteredBots" data-key="id" :loading="loading" paginator :rows="25" sort-field="name" :sort-order="1" scrollable table-style="min-width: 480px" aria-label="Bot accounts">
-        <PColumn field="name" header="Name" sortable><template #body="{ data }"><span class="bot-identity"><UserAvatar :name="data.name" :src="data.avatar_url" /><span>{{ data.name }}</span></span></template></PColumn>
-        <PColumn field="role" header="Application role"><template #body>Member</template></PColumn>
-        <PColumn field="active" header="Status" sortable><template #body="{ data }"><PTag :value="data.active ? 'Active' : 'Disabled'" :severity="data.active ? 'success' : 'secondary'" /></template></PColumn>
-        <PColumn header="Actions"><template #body="{ data }"><PButton type="button" severity="secondary" outlined :disabled="busy" :aria-label="`Edit bot ${data.name}`" @click="emit('open', data.id)">Edit</PButton></template></PColumn>
-        <template #empty>No bots found.</template>
+      <header class="page-heading"><div><h2>{{ t('Bot accounts') }}</h2><p>{{ t('Give automations and AI tools their own identity and project access.') }}</p></div><PButton type="button" :disabled="busy" @click="emit('open', 'new')">{{ t('Create bot') }}</PButton></header>
+      <PMessage v-if="error && !panelId" severity="error">{{ t(error) }}</PMessage>
+      <InputText v-model="search" type="search" class="bot-search" :placeholder="t('Search bots…')" :aria-label="t('Search bots')" />
+      <DataTable :value="filteredBots" data-key="id" :loading="loading" paginator :rows="25" sort-field="name" :sort-order="1" scrollable table-style="min-width: 480px" :aria-label="t('Bot accounts')">
+        <PColumn field="name" :header="t('Name')" sortable><template #body="{ data }"><span class="bot-identity"><UserAvatar :name="data.name" :src="data.avatar_url" /><span>{{ data.name }}</span></span></template></PColumn>
+        <PColumn field="role" :header="t('Application role')"><template #body>{{ t('Member') }}</template></PColumn>
+        <PColumn field="active" :header="t('Status')" sortable><template #body="{ data }"><PTag :value="t(data.active ? 'Active' : 'Disabled')" :severity="data.active ? 'success' : 'secondary'" /></template></PColumn>
+        <PColumn :header="t('Actions')"><template #body="{ data }"><PButton type="button" severity="secondary" outlined :disabled="busy" :aria-label="t('Edit bot {name}', { name: data.name })" @click="emit('open', data.id)">{{ t('Edit') }}</PButton></template></PColumn>
+        <template #empty>{{ t('No bots found.') }}</template>
       </DataTable>
-      <SettingsDetailPanel v-if="panelId" :key="panelId" :title="panelId === 'new' ? 'Create bot' : selected?.name || 'Bot details'" :busy="busy" @close="emit('close')">
-        <PMessage v-if="error" severity="error">{{ error }}</PMessage>
-        <form v-if="panelId === 'new'" aria-label="Create bot" @submit.prevent="create"><label>Bot name<InputText v-model="createName" required maxlength="200" placeholder="e.g. AI assistant" :disabled="busy" /></label><p class="hint">Bots are application members. Assign Reporter or Read-only access separately for each project.</p><div class="bot-actions"><PButton type="button" severity="secondary" outlined :disabled="busy" @click="emit('close')">Cancel</PButton><PButton type="submit" :loading="busy" :disabled="busy">Create bot</PButton></div></form>
-        <p v-else-if="loading" class="hint">Loading bot…</p>
+      <SettingsDetailPanel v-if="panelId" :key="panelId" :title="panelId === 'new' ? t('Create bot') : selected?.name || t('Bot details')" :busy="busy" @close="emit('close')">
+        <PMessage v-if="error" severity="error">{{ t(error) }}</PMessage>
+        <form v-if="panelId === 'new'" :aria-label="t('Create bot')" @submit.prevent="create"><label>{{ t('Bot name') }}<InputText v-model="createName" required maxlength="200" :placeholder="t('e.g. AI assistant')" :disabled="busy" /></label><p class="hint">{{ t('Bots are application members. Assign Reporter or Read-only access separately for each project.') }}</p><div class="bot-actions"><PButton type="button" severity="secondary" outlined :disabled="busy" @click="emit('close')">{{ t('Cancel') }}</PButton><PButton type="submit" :loading="busy" :disabled="busy">{{ t('Create bot') }}</PButton></div></form>
+        <p v-else-if="loading" class="hint">{{ t('Loading bot…') }}</p>
         <div v-else-if="selected" class="bot-details">
           <section class="bot-card bot-picture-card" aria-labelledby="bot-picture-heading">
-            <h2 id="bot-picture-heading">Bot picture</h2>
+            <h2 id="bot-picture-heading">{{ t('Bot picture') }}</h2>
             <div class="bot-picture-row">
               <UserAvatar class="bot-picture" :name="selected.name" :src="selected.avatar_url" />
-              <div><div class="bot-actions"><PButton type="button" severity="secondary" outlined :disabled="busy" @click="avatarInput?.click()">Upload picture</PButton><PButton v-if="selected.avatar_url" type="button" severity="secondary" outlined :disabled="busy" @click="removeAvatar">Remove picture</PButton></div><p class="hint">PNG, JPEG, GIF or WebP · up to 5 MB. Cropped to a square and saved immediately.</p></div>
+              <div><div class="bot-actions"><PButton type="button" severity="secondary" outlined :disabled="busy" @click="avatarInput?.click()">{{ t('Upload picture') }}</PButton><PButton v-if="selected.avatar_url" type="button" severity="secondary" outlined :disabled="busy" @click="removeAvatar">{{ t('Remove picture') }}</PButton></div><p class="hint">{{ t('PNG, JPEG, GIF or WebP · up to 5 MB. Cropped to a square and saved immediately.') }}</p></div>
             </div>
-            <input ref="avatarInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Bot picture" hidden :disabled="busy" @change="uploadAvatar" />
+            <input ref="avatarInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" :aria-label="t('Bot picture')" hidden :disabled="busy" @change="uploadAvatar" />
           </section>
-          <section class="bot-card"><header><h2>{{ selected.name }} <span class="bot-badge">Bot</span></h2><p>API access only. Bots have no password or OIDC login.</p></header><form @submit.prevent="update()"><label>Display name<InputText v-model="editName" required maxlength="200" :disabled="busy" /></label><div class="bot-actions"><PButton type="submit" :disabled="busy">Save bot</PButton><PButton type="button" severity="secondary" outlined :disabled="busy" @click="update(!selected.active)">{{ selected.active ? 'Disable bot' : 'Enable bot' }}</PButton></div></form><p class="hint">Disabling a bot revokes all its tokens. Re-enabling requires a new token.</p></section>
-          <section class="bot-card"><header><h2>Project access</h2><p>Bots can access only explicitly assigned projects.</p></header><form class="bot-project-form" @submit.prevent="grantProject"><label>Project<PSelect v-model="projectId" :options="projects.map(p => ({ value: p.id, label: `${p.name} (${p.key})` }))" option-label="label" option-value="value" filter placeholder="Select a project" aria-label="Project" :disabled="busy" /></label><label>Project permission<PSelect v-model="projectRole" :options="[{ label: 'Read-only', value: 'read-only' }, { label: 'Reporter', value: 'reporter' }]" option-label="label" option-value="value" aria-label="Project permission" :disabled="busy" /></label><PButton type="submit" :disabled="busy || !projectId">Grant / update access</PButton></form><ul class="bot-project-list"><li v-for="p in memberships" :key="p.project_id"><RouterLink :to="`/${p.slug}/`">{{ p.name }}</RouterLink><span>{{ p.effective_role === 'read-only' ? 'Read-only' : 'Reporter' }}</span><PButton type="button" severity="secondary" outlined :disabled="busy" @click="removeProject(p.project_id)">Remove</PButton></li></ul><p v-if="!memberships.length" class="hint">No projects assigned. This bot cannot read or change tickets yet.</p></section>
-          <TokenManager :key="selected.id + ':' + selected.active" :base-path="`/bots/${selected.id}/tokens`" :owner-role="selected.role" :disabled="!selected.active" title="Bot API tokens" />
+          <section class="bot-card"><header><h2>{{ selected.name }} <span class="bot-badge">{{ t('Bot') }}</span></h2><p>{{ t('API access only. Bots have no password or OIDC login.') }}</p></header><form @submit.prevent="update()"><label>{{ t('Display name') }}<InputText v-model="editName" required maxlength="200" :disabled="busy" /></label><div class="bot-actions"><PButton type="submit" :disabled="busy">{{ t('Save bot') }}</PButton><PButton type="button" severity="secondary" outlined :disabled="busy" @click="update(!selected.active)">{{ t(selected.active ? 'Disable bot' : 'Enable bot') }}</PButton></div></form><p class="hint">{{ t('Disabling a bot revokes all its tokens. Re-enabling requires a new token.') }}</p></section>
+          <section class="bot-card"><header><h2>{{ t('Project access') }}</h2><p>{{ t('Bots can access only explicitly assigned projects.') }}</p></header><form class="bot-project-form" @submit.prevent="grantProject"><label>{{ t('Project') }}<PSelect v-model="projectId" :options="projects.map(p => ({ value: p.id, label: `${p.name} (${p.key})` }))" option-label="label" option-value="value" filter :placeholder="t('Select a project')" :aria-label="t('Project')" :disabled="busy" /></label><label>{{ t('Project permission') }}<PSelect v-model="projectRole" :options="[{ label: t('Read-only'), value: 'read-only' }, { label: t('Reporter'), value: 'reporter' }]" option-label="label" option-value="value" :aria-label="t('Project permission')" :disabled="busy" /></label><PButton type="submit" :disabled="busy || !projectId">{{ t('Grant / update access') }}</PButton></form><ul class="bot-project-list"><li v-for="p in memberships" :key="p.project_id"><RouterLink :to="`/${p.slug}/`">{{ p.name }}</RouterLink><span>{{ t(p.effective_role === 'read-only' ? 'Read-only' : 'Reporter') }}</span><PButton type="button" severity="secondary" outlined :disabled="busy" @click="removeProject(p.project_id)">{{ t('Remove') }}</PButton></li></ul><p v-if="!memberships.length" class="hint">{{ t('No projects assigned. This bot cannot read or change tickets yet.') }}</p></section>
+          <TokenManager :key="selected.id + ':' + selected.active" :base-path="`/bots/${selected.id}/tokens`" :owner-role="selected.role" :disabled="!selected.active" :title="t('Bot API tokens')" />
         </div>
-        <PMessage v-else severity="error">Bot not found.</PMessage>
+        <PMessage v-else severity="error">{{ t('Bot not found.') }}</PMessage>
       </SettingsDetailPanel>
     </template>
   </component>

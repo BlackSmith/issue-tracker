@@ -8,6 +8,7 @@ Open the workspace with VS Code Dev Containers and run **Dev Containers: Rebuild
 - PostgreSQL 18 with the existing persistent `db-data` volume.
 - Adminer on the Compose network at `http://adminer:8080`.
 - Keycloak Mockup with project-specific OIDC identities.
+- Mailpit for development password invitation/reset email (SMTP `mailpit:1025`).
 - Shared `chromium4devcontainer` browser and existing OpenCode volumes are preserved by `docker-compose.local.yml`.
 
 The local override requires the host's `WAYLAND_DISPLAY` and `XDG_RUNTIME_DIR` environment variables. The Dev Container starts its dependent database and OIDC mock automatically.
@@ -20,6 +21,7 @@ The post-create script installs backend dependencies into `backend/.venv` when `
 | --- | --- |
 | Frontend | `http://host.docker.internal:5374` |
 | Backend | `http://host.docker.internal:5301` |
+| Mailpit inbox | `http://host.docker.internal:5375` |
 | OIDC mock | `http://host.docker.internal:5152` |
 | OIDC issuer | `http://host.docker.internal:5152/realms/issue-tracker` |
 | Discovery | `http://host.docker.internal:5152/realms/issue-tracker/.well-known/openid-configuration` |
@@ -32,6 +34,19 @@ Both the backend and shared browser resolve `host.docker.internal` through the h
 OIDC client ID: `issue-tracker`. The mock does not require a client secret. The development shim `oidc_mock.py` adds signed ID tokens with nonce, validates S256 PKCE and code/client/redirect binding, and permits the tracker callback above. The application independently verifies state, nonce, issuer, audience, expiry, and signature through Authlib. The upstream v0.1.0 image is pinned by digest because the shim uses its internals.
 
 ## Test identities
+
+Local password authentication is opt-in. Start the mail service with
+`docker compose -f .devcontainer/docker-compose.yml up -d mailpit`, configure
+`backend/.env` using `backend/.env.example`, generate a fresh `MAIL_ENCRYPTION_KEY`,
+and set `PASSWORD_ENABLED=true`. Restart the API after configuration changes.
+Mailpit receives messages without sending real mail. Read invitations/reset links
+in its inbox at the address above; password links are processed every 15 seconds.
+Use **Organization settings → Users → Create user** after signing in as an OIDC admin.
+
+Ticket notification emails use the same Mailpit and encryption configuration. Set
+`NOTIFICATIONS_ENABLED=true` in `backend/.env` and restart the API to enable them,
+independently of local password login. The API polls the notification outbox every
+15 seconds. Messages go to profile contact addresses and remain in the Mailpit inbox.
 
 | Username | Password | Intended application role |
 | --- | --- | --- |

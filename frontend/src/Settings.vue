@@ -5,12 +5,16 @@ import { accentOptions, applyTheme, backgroundOptions, defaultAppearance } from 
 import type { User } from './types'
 import UserAvatar from './components/UserAvatar.vue'
 import TokenManager from './components/TokenManager.vue'
+import PasswordSettings from './components/PasswordSettings.vue'
+import { language, setLanguage, t } from './i18n'
+import LanguagePicker from './components/LanguagePicker.vue'
 
 const form = reactive({
   name: auth.user?.name || '',
   email: auth.user?.email || '',
   theme_accent: auth.user?.theme_accent || defaultAppearance.theme_accent,
   theme_background: auth.user?.theme_background || defaultAppearance.theme_background,
+  language: auth.user?.language || language.value,
 })
 const error = ref(''), success = ref(''), saving = ref(false), avatarBusy = ref(false)
 const avatarInput = ref<HTMLInputElement | null>(null)
@@ -22,6 +26,8 @@ watch(() => [form.theme_accent, form.theme_background], () => {
   success.value = ''
 })
 onBeforeUnmount(() => applyTheme(auth.user))
+watch(() => form.language, setLanguage)
+onBeforeUnmount(() => { if (auth.user) setLanguage(auth.user.language) })
 
 async function save() {
   saving.value = true; error.value = ''; success.value = ''
@@ -29,6 +35,7 @@ async function save() {
     auth.user = await api<User>('/users/me', { method: 'PUT', body: JSON.stringify(form) })
     Object.assign(form, { name: auth.user.name, email: auth.user.email })
     applyTheme(auth.user)
+    setLanguage(auth.user.language)
     success.value = 'Your settings have been saved.'
   } catch (e) { error.value = (e as Error).message }
   finally { saving.value = false }
@@ -38,6 +45,7 @@ function discard() {
   Object.assign(form, {
     name: auth.user.name, email: auth.user.email,
     theme_accent: auth.user.theme_accent, theme_background: auth.user.theme_background,
+    language: auth.user.language,
   })
   error.value = ''; success.value = ''
   applyTheme(auth.user)
@@ -75,42 +83,44 @@ async function removeAvatar() {
 
 <template>
   <main class="settings-page">
-    <div class="breadcrumbs"><RouterLink to="/">Workspace</RouterLink><span>/</span> Personal settings</div>
-    <header class="page-heading"><div><span class="eyebrow">YOUR ACCOUNT</span><h1>Personal settings</h1><p>Make your profile and workspace feel like you.</p></div></header>
+    <div class="breadcrumbs"><RouterLink to="/">{{ t('Workspace') }}</RouterLink><span>/</span> {{ t('Personal settings') }}</div>
+    <header class="page-heading"><div><span class="eyebrow">{{ t('YOUR ACCOUNT') }}</span><h1>{{ t('Personal settings') }}</h1><p>{{ t('Make your profile and workspace feel like you.') }}</p></div></header>
     <form class="settings-form" @submit.prevent="save">
       <section class="settings-card" aria-labelledby="profile-heading">
-        <header><h2 id="profile-heading">Profile</h2><p>Your name and picture appear beside your comments and activity.</p></header>
+        <header><h2 id="profile-heading">{{ t('Profile') }}</h2><p>{{ t('Your name and picture appear beside your comments and activity.') }}</p></header>
         <div class="profile-picture-row">
           <UserAvatar class="profile-picture" :name="form.name || auth.user?.name || '?'" :src="auth.user?.avatar_url" />
           <div>
             <div class="profile-picture-actions">
-              <PButton type="button" severity="secondary" outlined :disabled="busy" @click="avatarInput?.click()">{{ avatarBusy ? 'Updating…' : 'Upload picture' }}</PButton>
-              <PButton v-if="auth.user?.avatar_url" type="button" class="quiet" :disabled="busy" @click="removeAvatar">Remove picture</PButton>
+              <PButton type="button" severity="secondary" outlined :disabled="busy" @click="avatarInput?.click()">{{ t(avatarBusy ? 'Updating…' : 'Upload picture') }}</PButton>
+              <PButton v-if="auth.user?.avatar_url" type="button" class="quiet" :disabled="busy" @click="removeAvatar">{{ t('Remove picture') }}</PButton>
             </div>
-            <p class="hint">PNG, JPEG, GIF or WebP · up to 5 MB. Cropped to a square and saved immediately.</p>
-            <input ref="avatarInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Profile picture" hidden :disabled="busy" @change="uploadAvatar" />
+            <p class="hint">{{ t('PNG, JPEG, GIF or WebP · up to 5 MB. Cropped to a square and saved immediately.') }}</p>
+            <input ref="avatarInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" :aria-label="t('Profile picture')" hidden :disabled="busy" @change="uploadAvatar" />
           </div>
         </div>
         <div class="profile-fields">
-          <label>Display name<InputText v-model="form.name" name="name" autocomplete="name" required maxlength="200" :disabled="busy" /></label>
-          <label>Contact email<InputText v-model="form.email" name="email" type="email" autocomplete="email" required maxlength="320" :disabled="busy" /><small>Sign-in is managed by your identity provider. Changing this address updates your profile contact email.</small></label>
+          <label>{{ t('Display name') }}<InputText v-model="form.name" name="name" autocomplete="name" required maxlength="200" :disabled="busy" /></label>
+          <label>{{ t('Contact email') }}<InputText v-model="form.email" name="email" type="email" autocomplete="email" required maxlength="320" :disabled="busy" /><small>{{ t('Changing this address only updates your profile contact email, not your sign-in credentials.') }}</small></label>
         </div>
       </section>
       <section class="settings-card" aria-labelledby="appearance-heading">
-        <header><h2 id="appearance-heading">Appearance</h2><p>Preview your colors immediately. Save to keep them across sessions and devices.</p></header>
-        <fieldset :disabled="busy"><legend>Interface color</legend>
-          <div class="appearance-options"><PButton v-for="option in accentOptions" :key="option.id" type="button" severity="secondary" outlined :disabled="busy" :aria-pressed="form.theme_accent === option.id" @click="form.theme_accent = option.id"><span class="color-swatch" :style="{ backgroundColor: option.color }" aria-hidden="true"></span>{{ option.name }}<span class="choice-check" aria-hidden="true">{{ form.theme_accent === option.id ? '✓' : '' }}</span></PButton></div>
+        <header><h2 id="appearance-heading">{{ t('Appearance') }}</h2><p>{{ t('Preview your colors immediately. Save to keep them across sessions and devices.') }}</p></header>
+        <fieldset :disabled="busy"><legend>{{ t('Interface color') }}</legend>
+          <div class="appearance-options"><PButton v-for="option in accentOptions" :key="option.id" type="button" severity="secondary" outlined :disabled="busy" :aria-pressed="form.theme_accent === option.id" @click="form.theme_accent = option.id"><span class="color-swatch" :style="{ backgroundColor: option.color }" aria-hidden="true"></span>{{ t(option.name) }}<span class="choice-check" aria-hidden="true">{{ form.theme_accent === option.id ? '✓' : '' }}</span></PButton></div>
         </fieldset>
-        <fieldset :disabled="busy"><legend>Application background</legend>
-          <div class="appearance-options background-options"><PButton v-for="option in backgroundOptions" :key="option.id" type="button" severity="secondary" outlined :disabled="busy" :aria-pressed="form.theme_background === option.id" @click="form.theme_background = option.id"><span class="color-swatch" :style="{ backgroundColor: option.color }" aria-hidden="true"></span>{{ option.name }}<span class="choice-check" aria-hidden="true">{{ form.theme_background === option.id ? '✓' : '' }}</span></PButton></div>
+        <fieldset :disabled="busy"><legend>{{ t('Application background') }}</legend>
+          <div class="appearance-options background-options"><PButton v-for="option in backgroundOptions" :key="option.id" type="button" severity="secondary" outlined :disabled="busy" :aria-pressed="form.theme_background === option.id" @click="form.theme_background = option.id"><span class="color-swatch" :style="{ backgroundColor: option.color }" aria-hidden="true"></span>{{ t(option.name) }}<span class="choice-check" aria-hidden="true">{{ form.theme_background === option.id ? '✓' : '' }}</span></PButton></div>
         </fieldset>
-        <PButton type="button" class="quiet" :disabled="busy" @click="Object.assign(form, defaultAppearance)">Reset appearance to default</PButton>
+        <PButton type="button" class="quiet" :disabled="busy" @click="Object.assign(form, defaultAppearance)">{{ t('Reset appearance to default') }}</PButton>
       </section>
-      <div class="settings-status" aria-live="polite"><PMessage v-if="error" severity="error">{{ error }}</PMessage><PMessage v-if="success" severity="success">{{ success }}</PMessage></div>
-      <footer class="settings-footer"><span>{{ dirty ? 'You have unsaved changes.' : 'Your preferences are up to date.' }}</span><div><PButton type="button" severity="secondary" outlined :disabled="busy || !dirty" @click="discard">Discard changes</PButton><PButton type="submit" :loading="saving" :disabled="busy || !dirty">Save settings</PButton></div></footer>
+      <section class="settings-card"><h2>{{ t('Interface language') }}</h2><p class="hint">{{ t('Choose the language used throughout the application.') }}</p><LanguagePicker v-model="form.language" :disabled="busy" /></section>
+      <div class="settings-status" aria-live="polite"><PMessage v-if="error" severity="error">{{ t(error) }}</PMessage><PMessage v-if="success" severity="success">{{ t(success) }}</PMessage></div>
+      <footer class="settings-footer"><span>{{ t(dirty ? 'You have unsaved changes.' : 'Your preferences are up to date.') }}</span><div><PButton type="button" severity="secondary" outlined :disabled="busy || !dirty" @click="discard">{{ t('Discard changes') }}</PButton><PButton type="submit" :loading="saving" :disabled="busy || !dirty">{{ t('Save settings') }}</PButton></div></footer>
     </form>
     <TokenManager v-if="auth.user?.role" :owner-role="auth.user.role" />
-    <section v-if="auth.user?.role === 'administrator'" class="settings-card automation-settings"><h2>Automation accounts</h2><p class="hint">Give integrations and AI tools a dedicated bot identity with explicit project access.</p><RouterLink to="/admin/settings?tab=bots" class="button">Manage bot accounts →</RouterLink></section>
+    <PasswordSettings />
+    <section v-if="auth.user?.role === 'administrator'" class="settings-card automation-settings"><h2>{{ t('Automation accounts') }}</h2><p class="hint">{{ t('Give integrations and AI tools a dedicated bot identity with explicit project access.') }}</p><RouterLink to="/admin/settings?tab=bots" class="button">{{ t('Manage bot accounts →') }}</RouterLink></section>
   </main>
 </template>
 

@@ -1,7 +1,8 @@
 # Issue Tracker
 
 A standalone, organization-scoped issue tracker inspired by GitLab Work Items.
-Built with FastAPI, PostgreSQL, Vue 3, and PrimeVue 4. The interface and API use English.
+Built with FastAPI, PostgreSQL, Vue 3, and PrimeVue 4. The interface supports English
+and Czech; API field names and enum values remain English.
 
 ## Current increment
 
@@ -10,6 +11,8 @@ Built with FastAPI, PostgreSQL, Vue 3, and PrimeVue 4. The interface and API use
   follows the account's accent color; descriptions and comments retain the shared Tiptap editor.
 - Generic OIDC login through Authlib with server-side sessions, session rotation,
   CSRF protection, state, nonce, and S256 PKCE.
+- Multiple configurable OIDC providers, Facebook OAuth login, and local email/password
+  accounts with administrator-controlled invitations, recovery, and SMTP delivery retries.
 - Stable internal accounts and separate issuer/subject identities. Matching email
   addresses never merge accounts or confer organization membership.
 - Application roles are Admin (API `administrator`) and Member (`member`). Only
@@ -21,7 +24,7 @@ Built with FastAPI, PostgreSQL, Vue 3, and PrimeVue 4. The interface and API use
   including projects without an explicit membership row. They cannot be removed
   or demoted through project membership APIs. Creators receive an explicit Owner row.
 - Personal settings for display name, contact email, profile picture, interface
-  accent color, and application background. Green is the default accent.
+  accent color, application background, and English/Czech interface language. Green is the default accent.
 - Project-scoped work item numbers, visually edited descriptions, types, fixed statuses,
   priorities, labels, due dates, editing, and activity history.
 - Metadata activity records previous and new values, including assignee names,
@@ -54,12 +57,12 @@ Built with FastAPI, PostgreSQL, Vue 3, and PrimeVue 4. The interface and API use
 - Personal API tokens and administrator-managed bot accounts with scoped bearer
   authentication, expiration, revocation, and last-used metadata.
 
-This is an initial development increment. Assignees, invitations and identity
-linking in the UI, multiple simultaneously configured providers, trusted-provider
+This is an initial development increment. External identity invitations and identity
+linking in the UI, trusted-provider
 automatic membership, hierarchy/relationships, milestones, Kanban, saved views,
 webhooks/worker, and production Docker deployment are planned.
-Facebook Login is outside the current scope. The provider protocol allows a later
-provider-specific OAuth adapter without changing internal account management.
+Each account currently uses one authentication method. MFA is deferred; future
+application-managed MFA is intended for local passwords only.
 
 ## Development setup
 
@@ -151,7 +154,7 @@ The Users tab lists all human accounts, including inactive accounts and accounts
 awaiting membership, with name, email, application role (**Admin** or **Member**),
 last successful browser sign-in, and account status. It supports search, sorting,
 and pagination. Bots remain in their dedicated tab. Last sign-in is recorded on
-successful OIDC authentication, not API requests or token usage. Older accounts
+successful browser authentication (OIDC, Facebook, or local password), not API requests or token usage. Older accounts
 show **Not recorded** until their next sign-in; no historical times are inferred.
 The administrator-only endpoints are `GET /api/v1/admin/users` and
 `PUT /api/v1/admin/users/{id}` with `role` and `active`. At least one active
@@ -196,8 +199,27 @@ with a green color and empty description, preserving assignments.
 ### Configuration
 
 Settings are read from environment variables, optionally from `backend/.env`
-when running in the backend directory. Compose sets the development defaults.
-An example is provided at `backend/.env.example`.
+when running in the backend directory. Select a TOML configuration file with
+`TRACKER_CONFIG=/absolute/path/to/config.toml`; see `backend/config.example.toml`.
+Environment variables override `.env`, which overrides TOML. Compose sets the
+development defaults. An environment example is provided at `backend/.env.example`.
+
+`providers` is a TOML array of tables (or the `PROVIDERS` JSON environment variable).
+Each entry has a stable unique `id`, display `name`, `type` (`oidc` or `facebook`),
+`client_id`, and optional `client_secret` or `client_secret_env`. The latter names
+an environment variable containing that provider's secret. OIDC additionally
+requires `issuer`. Facebook requires a secret and supports `graph_version`
+(default `v24.0`). Register the exact callback
+`<api_base_url>/api/v1/auth/<provider-id>/callback` with each provider. Keep provider
+IDs stable; Facebook identities are namespaced by Meta app ID and app-scoped user ID.
+The application requests Facebook `public_profile` and `email`; absence of an email
+does not change how identities are identified. Configure Meta app availability,
+test users, permissions, and allowed callback URLs in the Meta developer console.
+
+An explicit nonempty provider list replaces legacy OIDC configuration. When no
+list is supplied, the existing `OIDC_*` variables below remain supported. To run
+password-only with development Compose defaults, also set `OIDC_ISSUER` to an empty
+string in the API process environment. TOML alone cannot override Compose variables.
 
 For another OIDC provider, configure `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
 `OIDC_CLIENT_SECRET`, `OIDC_NAME`, and `OIDC_REDIRECT_URI`. Register that exact
@@ -206,6 +228,105 @@ HTTP development. The browser session stores no provider tokens; Authlib's
 temporary authorization state and PKCE verifier live in server-side sessions.
 Sessions expire after 12 hours by default; logout revokes the local session.
 Provider-wide logout is not performed.
+
+#### Local password accounts
+
+Enable `password_enabled` and configure `smtp_host`, `smtp_port`, `smtp_from`, and
+`smtp_security` (`starttls`, `tls`, or development-only `none`). Optional SMTP
+credentials are `smtp_username` and `smtp_password`. `mail_encryption_key` must be
+a Fernet key; generate it from `backend/` with:
+
+```sh
+.venv/bin/python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+```
+
+Keep the key and provider/SMTP secrets outside version control. All API processes
+must share the encryption key; changing it prevents delivery of already queued
+messages, so drain the outbox or resend invitations after rotation. Password login
+refuses to start without the required mail settings and valid encryption key.
+
+In **Organization settings → Users**, administrators can create a local account
+and email its setup link, resend setup invitations, reset a password, or change
+the sign-in email. Sign-in emails are case-insensitive and unique among local
+accounts, independent of editable profile contact addresses. Matching an external
+account's email never merges accounts or identities. External sign-ins still
+create pending accounts until an administrator grants membership.
+
+Passwords use Argon2id and must contain 12–128 characters. Setup links are single-use,
+expire after `invitation_ttl` (default 24 hours) or `password_reset_ttl` (default 1 hour),
+and are invalidated by subsequent sends. Links carry their secret in the URL fragment,
+which the frontend removes and retains in memory; refresh requires reopening the
+complete email link. Opening a link does not consume it; submitting a valid new
+password does. No self-service password recovery endpoint is provided.
+
+An administrator reset or change of login email immediately invalidates the old
+password and all browser sessions. The new address must be confirmed by setting
+a password through its emailed link. Users can change their own password in
+**Personal settings** by supplying the current password; other browser sessions
+are revoked. Existing personal API tokens retain their independent lifecycle.
+Disabling a human account also revokes its browser sessions permanently.
+
+Credential management requires browser sessions and CSRF validation; API tokens
+cannot create users, send recovery links, or set/change passwords. Password login
+is limited to 10 attempts per account and 100 per direct client IP per 15 minutes.
+Setup submissions and password changes are also limited. The direct peer address
+is used; proxy-forwarded addresses are not blindly trusted, so proxy deployments
+share that IP budget unless their trusted-proxy configuration supplies client IPs.
+
+The database-backed email outbox is polled every 15 seconds by the API. Messages
+are encrypted at rest, SMTP failures retry with exponential backoff up to eight
+attempts, and bodies are erased on delivery, expiry/cancellation, or supersession.
+User details show the latest delivery state; refresh to retrieve updates. Multiple
+API processes coordinate with database locks. SMTP delivery is at-least-once: a
+process crash after SMTP acceptance but before commit can cause a duplicate email
+containing the same single-use link. Secrets are never included in API responses
+or application log messages. Configure standard Python logging to retain INFO-level
+credential lifecycle events with actor/user IDs.
+
+For a new password-only instance, bootstrap the first administrator from `backend/`
+after configuring mail and applying migrations:
+
+```sh
+.venv/bin/python -m app.cli bootstrap-admin --local \
+  --name 'Administrator' --email admin@example.com
+```
+
+The command queues a setup email and refuses to run once an administrator exists.
+`provision-user --local` similarly creates and invites a new local member. The API
+must be running to deliver queued messages. Legacy external CLI provisioning is unchanged.
+
+#### Ticket email notifications
+
+Enable `notifications_enabled = true` (or `NOTIFICATIONS_ENABLED=true`) and configure
+the SMTP settings and `mail_encryption_key` described above. Notifications work with
+every authentication provider, independently of `password_enabled`. They are disabled
+by default; enabling them requires valid mail configuration. Apply migrations and
+restart the API after changing configuration.
+
+- New tickets notify all project Owners, including inherited application administrators,
+  as well as the author, assignee, and users mentioned in the description.
+- Ticket changes notify the author, current assignee, discussion/activity participants,
+  and users mentioned in the description or existing comments. Reassignment also
+  notifies the previous assignee. Participants are comment and activity authors.
+- Changes include metadata/title/description edits, comments, checklist toggles, and
+  permanent attachment uploads. Draft uploads, failed writes, and no-op saves do not
+  send notifications. Editor attachments are covered by the subsequent content save.
+- Mentions use the editor's stable `@` user links, including links in comments. Plain
+  names and code examples do not subscribe users. A removed mention stops contributing
+  that recipient unless another recipient rule applies.
+- Each user receives one email per event, including their own changes. Notifications
+  go individually to current profile contact emails, independently of login addresses.
+  Bots, inactive/pending users, and users without current project access are excluded.
+  Eligibility is checked again immediately before delivery.
+
+Emails contain the ticket reference/title, actor, change summary, and canonical link.
+Comment notifications link to the discussion without copying the comment body.
+They currently use English. Notification payloads are encrypted in a transactional
+database outbox, so rolled-back changes never queue mail. The API polls every 15 seconds
+and retries SMTP failures with exponential backoff for up to eight attempts. Payloads
+are erased after delivery, cancellation, or final failure. Multiple API workers claim
+separate rows with database locks. Delivery is at-least-once; a crash after SMTP
+acceptance and before commit can cause a duplicate with the same Message-ID.
 
 The upstream development mock v0.1.0 omits ID tokens and PKCE verification.
 `.devcontainer/oidc_mock.py` adds these features in the mock, while keeping normal
@@ -275,6 +396,23 @@ backgrounds (white, mist, mint, sand, slate). Colors preview immediately; **Save
 settings** persists the profile and appearance on the account for other sessions
 and devices. **Discard changes** or leaving the page restores the saved theme.
 Signing out restores green/white so preferences never leak to another account.
+
+Choose **Interface language → English / Čeština** to preview a language immediately,
+then **Save settings** to keep it on your account across sessions and devices.
+Discarding changes or leaving settings restores the saved language. English is
+the default for existing and new accounts. The login and password-setup pages also
+offer a language selector; their choice is remembered in this browser. Signing in
+loads the account's language, while signing out keeps that language on the login page.
+Apply migration `0012` before starting the updated backend.
+
+Interface labels, enum display names, editor tools, dates, generated activity and
+validation feedback are localized. Ticket content, comments, names, labels and
+filenames keep their original text. URLs and API enum values are language-independent.
+English source messages serve as translation keys and fallback text in
+`frontend/src/i18n.ts`; Czech translations live in `frontend/src/locales/cs.json`.
+Use `t()` for interface text and named placeholders for dynamic values. Translate
+option labels without changing their values. Catalog and interface-coverage checks
+run with `npm test` in `frontend/`.
 
 Profile pictures accept PNG, JPEG, GIF, and WebP up to 5 MB and 16 megapixels.
 They are cropped to a square, normalized to a 256×256 PNG, and saved immediately.

@@ -2,6 +2,7 @@ export interface User {
   id: string; name: string; email: string; role: 'administrator' | 'member' | null
   avatar_url: string | null; theme_accent: string; theme_background: string
   is_bot: boolean
+  language: 'en' | 'cs'
 }
 export interface Project { id: string; key: string; slug: string; legacy_slug?: string | null; name: string; description: string; visibility: string; can_write: boolean; can_manage: boolean }
 export interface Assignee { id: string; name: string; avatar_url: string | null; is_bot: boolean }
