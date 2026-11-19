@@ -4,6 +4,7 @@
 
 ### Added
 
+- English application screenshots and a README showcase covering the project workspace, ticket details, visual editing, and sign-in.
 - Multi-stage Docker images for the API and compiled frontend, an example Compose deployment with PostgreSQL and automatic migrations, and deployment/environment configuration documentation.
 - Owner-configurable default project access (Reporter or Read-only) for active human application members, with explicit-role precedence, consistent API/reference/attachment/notification permissions, English/Czech settings, and migration `0016` preserving closed access for existing projects.
 - Owner-managed publication of individual tickets to all project members in restricted projects, with reversible detail controls, activity history, and migration `0015` defaulting existing tickets to unpublished.

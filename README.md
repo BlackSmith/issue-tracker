@@ -4,6 +4,39 @@ A standalone, organization-scoped issue tracker inspired by GitLab Work Items.
 Built with FastAPI, PostgreSQL, Vue 3, and PrimeVue 4. The interface supports English
 and Czech; API field names and enum values remain English.
 
+## Screenshots
+
+A look at Issue Tracker in English, using a sample product development project.
+
+### Project workspace
+
+Keep work organized with searchable filters, clear statuses, priorities, and colorful labels.
+
+![Project workspace showing work items, status filters, priorities, and labels](docs/images/screenshots/work-items.png)
+
+<details>
+<summary>Explore ticket details, the visual editor, and sign-in</summary>
+
+### Ticket details and discussion
+
+Bring descriptions, interactive checklists, activity, comments, and ticket metadata together.
+
+![Ticket detail showing a formatted description, checklist, discussion, and metadata](docs/images/screenshots/ticket-detail.png)
+
+### Visual editing
+
+Write rich descriptions and comments with headings, lists, checklists, quotes, and file uploads.
+
+![Visual editor with a formatting toolbar, headings, checklist, quote, and attachment controls](docs/images/screenshots/editor.png)
+
+### Sign-in
+
+Connect through your organization's identity provider or an administrator-managed local account.
+
+![English sign-in page offering local password and company SSO authentication](docs/images/screenshots/sign-in.png)
+
+</details>
+
 ## Current increment
 
 - PrimeVue controls for buttons, text fields, selects, searchable label multi-selects,
