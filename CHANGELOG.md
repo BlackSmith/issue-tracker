@@ -23,6 +23,7 @@
 
 ### Changed
 
+- Replace the placeholder brand mark with a ticket-and-check SVG logo and favicon, and redesign sign-in with a responsive split layout, English/Czech copy, and accessible text contrast.
 - Project settings initially focuses the project name instead of the close button, avoiding the automatic circle around X while preserving keyboard focus indicators.
 - Personal settings include language selection and local password management; organization user details include authentication method, login email, and invitation/recovery delivery state.
 - Status badges and assignee avatars/icons are shared across ticket displays and filter controls.
