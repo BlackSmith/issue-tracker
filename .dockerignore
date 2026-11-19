@@ -1,0 +1,17 @@
+.git
+.devcontainer
+.env
+**/.env
+**/.env.*
+**/.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+**/*.log
+backend/tests
+frontend/tests
+deploy/config.toml
+var
+tmp

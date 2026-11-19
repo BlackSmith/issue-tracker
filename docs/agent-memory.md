@@ -1,5 +1,9 @@
 # Project Memory
 
+## Container Deployment
+
+- The root `Dockerfile` has `api` (Python/Uvicorn, UID/GID 10001) and `frontend` (compiled Vue served by unprivileged Nginx) targets. Root Compose runs PostgreSQL 18, a one-shot Alembic migration service, API, and frontend; only Nginx is published, with same-origin `/api/` proxying and SPA fallback. Email and attachment cleanup remain API lifespan tasks, without a separate worker. See `docs/deployment.md` for environment/TOML configuration and operations. The deployment root `.env` is separate from the development `backend/.env`.
+
 ## Ticket Notifications
 
 - Migration `0013` adds a separate encrypted transactional ticket notification outbox. `notifications_enabled` is opt-in and independent of password authentication, using the same SMTP configuration/Fernet key and 15-second API mail loop. New tickets notify explicit Owners and inherited human administrators plus author/assignee/mentions; updates notify author, current/previous assignee, comment/activity authors, and stable user links throughout current description/comments. Recipients include the actor and are deduplicated per event.

@@ -69,9 +69,16 @@ and Czech; API field names and enum values remain English.
 This is an initial development increment. External identity invitations and identity
 linking in the UI, trusted-provider
 automatic membership, hierarchy/relationships, milestones, Kanban, saved views,
-webhooks/worker, and production Docker deployment are planned.
+webhooks/worker are planned.
 Each account currently uses one authentication method. MFA is deferred; future
 application-managed MFA is intended for local passwords only.
+
+## Docker deployment
+
+Use the root [Dockerfile](Dockerfile) and [docker-compose.yml](docker-compose.yml)
+to build and run the API, compiled frontend/reverse proxy, and PostgreSQL.
+See [Deployment and configuration](docs/deployment.md) for setup, environment
+variables, OIDC/Facebook login, local accounts, migrations, and backups.
 
 ## Development setup
 
