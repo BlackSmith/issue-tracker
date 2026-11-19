@@ -66,7 +66,8 @@ async function remove(member: Member) {
   <div :class="{ 'modal-backdrop': !embedded }" @click.self="!embedded && !busy && emit('close')" @keydown.esc.stop="!embedded && !busy && emit('close')">
     <section :class="embedded ? 'embedded-members' : 'modal members-modal'" :role="embedded ? undefined : 'dialog'" :aria-modal="embedded ? undefined : true" aria-labelledby="members-heading" :aria-busy="loading || busy">
       <header><div><h2 id="members-heading">{{ t('Project members') }}</h2><p v-if="!embedded" class="hint">{{ project.name }}</p></div><PButton v-if="!embedded" type="button" class="quiet" :disabled="busy" :aria-label="t('Close')" @click="emit('close')">×</PButton></header>
-      <p class="hint">{{ t('Owner manages the project, members, and local labels. Reporter creates and updates work items and comments. Read-only can browse tickets. Members need an explicit project role to see this project. Application admins are permanent owners of every project. Bot access is managed by application admins.') }}</p>
+      <p class="hint">{{ t('Owner manages the project, members, and local labels. Reporter creates and updates work items and comments. Read-only can browse tickets.') }}</p>
+      <p class="hint">{{ t('Default access') }}: {{ project.default_access ? t(project.default_access) : t('No default access') }}. {{ t('Explicit roles override default access. Removing an explicit role restores default access, if enabled.') }}</p>
       <p v-if="error" class="error" role="alert">{{ t(error) }}</p>
       <p v-if="message" class="hint" role="status">{{ t(message) }}</p>
       <p v-if="loading" class="hint">{{ t('Loading members…') }}</p>

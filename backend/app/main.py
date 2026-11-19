@@ -15,7 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 from starlette.responses import JSONResponse
 from pydantic import Field
-from sqlalchemy import and_, case, exists, func, or_, select, update
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -30,7 +30,7 @@ from app.providers import OIDCProvider, FacebookProvider
 from app.passwords import router as passwords_router, establish_session, auth_details
 from app.mail import mail_loop
 from app.notifications import enqueue_notification
-from app.permissions import can_view_item, visible_item
+from app.permissions import can_view_item, effective_project_role, visible_item, visible_project
 from app.profiles import avatar_url, profile_json, router as profile_router
 from app.references import router as references_router
 from app.tokens import router as tokens_router
@@ -88,9 +88,9 @@ def can_manage_project(user, member):
 def project_access(db: Session, project_id: str, user: User, write=False, manage=False) -> Project:
     project = db.get(Project, project_id)
     member = db.get(ProjectMember, (project_id, user.id))
-    if not project or ((user.role != "administrator" or user.is_bot) and not member):
+    effective = effective_project_role(project, user, member) if project else None
+    if not effective:
         raise HTTPException(404, "Project not found")
-    effective = "owner" if user.role == "administrator" and not user.is_bot else member.role
     if write and effective not in {"owner", "reporter"}:
         raise HTTPException(403, "Read-only access")
     if manage and not can_manage_project(user, member):
@@ -112,10 +112,11 @@ def item_access(db, item_id, user, write=False):
 
 def project_json(project, user, db):
     member = db.get(ProjectMember, (project.id, user.id))
-    can_write = (user.role == "administrator" and not user.is_bot) or (member is not None and member.role in {"owner", "reporter"})
+    can_write = effective_project_role(project, user, member) in {"owner", "reporter"}
     return {"id": project.id, "key": project.key, "slug": project.key, "legacy_slug": project.slug if project.slug != project.key else None, "name": project.name,
             "description": project.description, "visibility": project.visibility, "can_write": can_write,
             "restrict_ticket_visibility": project.restrict_ticket_visibility,
+            "default_access": project.default_access,
             "can_manage": can_manage_project(user, member)}
 
 
@@ -137,7 +138,9 @@ def assignable_users(project):
                                                       ProjectMember.project_id == project.id))
             .where(User.active.is_(True), User.role.in_(["administrator", "member"]),
                    or_(and_(User.role == "administrator", User.is_bot.is_(False)),
-                        ProjectMember.role.in_(["owner", "reporter"]))))
+                         ProjectMember.role.in_(["owner", "reporter"]),
+                         and_(User.is_bot.is_(False), ProjectMember.user_id.is_(None),
+                              project.default_access == "reporter"))))
 
 
 def resolve_assignee(db, project, user_id):
@@ -225,9 +228,7 @@ def logout(request: Request, user: User = Depends(browser_user)):
 
 @app.get(api + "/projects", tags=["Projects"])
 def projects(user: User = Depends(organization_user), db: Session = Depends(get_db)):
-    query = select(Project).order_by(Project.name)
-    if user.is_bot or user.role != "administrator":
-        query = query.where(exists().where(ProjectMember.project_id == Project.id, ProjectMember.user_id == user.id))
+    query = select(Project).where(visible_project(user)).order_by(Project.name)
     return [project_json(p, user, db) for p in db.scalars(query)]
 
 

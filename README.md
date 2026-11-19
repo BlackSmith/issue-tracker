@@ -19,8 +19,11 @@ and Czech; API field names and enum values remain English.
   Admin can create projects and manage users, bots, and organization labels.
   Project roles are Owner (`owner`), Reporter (`reporter`), and Read-only (`read-only`).
   Owner manages settings, members, and local labels; Reporter contributes to work
-  items and comments; Read-only can browse tickets. Members see only explicitly
-  assigned projects. Application admins are permanent owners of every project,
+  items and comments; Read-only can browse tickets. Owners can set default access
+  to Reporter or Read-only for all active human application members without an
+  explicit project role. Default access is disabled initially; explicit roles take
+  precedence, and removing an explicit role restores the configured default.
+  Bots still require explicit membership. Application admins are permanent owners of every project,
   including projects without an explicit membership row. They cannot be removed
   or demoted through project membership APIs. Creators receive an explicit Owner row.
 - Projects can restrict Reporter and Read-only access to authored or assigned tickets.

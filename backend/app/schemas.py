@@ -54,6 +54,7 @@ class ProjectCreate(BaseModel):
     description: str = Field(default="", max_length=10000)
     visibility: Literal["organization", "private"] = "private"
     restrict_ticket_visibility: StrictBool = False
+    default_access: Literal["reporter", "read-only"] | None = None
 
     @field_validator("key")
     @classmethod
@@ -76,6 +77,7 @@ class ProjectUpdate(BaseModel):
     description: str = Field(max_length=10000)
     visibility: Literal["organization", "private"]
     restrict_ticket_visibility: StrictBool = False
+    default_access: Literal["reporter", "read-only"] | None = None
 
     @field_validator("name")
     @classmethod

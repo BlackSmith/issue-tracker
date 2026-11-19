@@ -1,4 +1,9 @@
 {
+  "Default access": "Výchozí přístup",
+  "Owner manages the project, members, and local labels. Reporter creates and updates work items and comments. Read-only can browse tickets.": "Vlastník spravuje projekt, členy a místní štítky. Zpravodaj vytváří a upravuje tickety a komentáře. Role Pouze čtení umožňuje prohlížet tickety.",
+  "No default access": "Bez výchozího přístupu",
+  "Applies to all active application members without an explicit project role. Explicit roles take precedence. Application admins remain Owners; bots require explicit access.": "Platí pro všechny aktivní členy aplikace bez explicitní role v projektu. Explicitní role mají přednost. Správci aplikace zůstávají vlastníky; boti vyžadují explicitní přístup.",
+  "Explicit roles override default access. Removing an explicit role restores default access, if enabled.": "Explicitní role mají přednost před výchozím přístupem. Odebrání explicitní role obnoví výchozí přístup, pokud je zapnutý.",
   "Ticket visibility": "Viditelnost ticketu",
   "All project members": "Všichni členové projektu",
   "Author, assignee and project owners": "Autor, přiřazený uživatel a vlastníci projektu",

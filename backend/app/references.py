@@ -3,24 +3,16 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import String, cast, exists, or_, select
+from sqlalchemy import String, cast, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Project, ProjectMember, User, WorkItem
+from app.models import Project, User, WorkItem
 from app.profiles import avatar_url
-from app.permissions import visible_item
+from app.permissions import project_user_access, visible_item, visible_project
 from app.security import organization_user
 
 router = APIRouter(prefix="/api/v1/references", tags=["References"])
-
-
-def visible_project(user: User):
-    if user.is_bot:
-        return exists().where(ProjectMember.project_id == Project.id, ProjectMember.user_id == user.id)
-    if user.role == "administrator":
-        return True
-    return exists().where(ProjectMember.project_id == Project.id, ProjectMember.user_id == user.id)
 
 
 def context_project(db: Session, user: User, project_id: str | None):
@@ -53,8 +45,7 @@ def suggest_users(q: str = Query("", max_length=200), project_id: str | None = N
     project = context_project(db, user, project_id)
     query = select(User).where(User.active.is_(True), User.role.is_not(None))
     if project:
-        query = query.where(or_(User.role == "administrator", exists().where(
-            ProjectMember.project_id == project.id, ProjectMember.user_id == User.id)))
+        query = query.where(project_user_access(project.id))
     term = literal_search(q.lstrip("@").strip())
     if term:
         query = query.where(User.name.ilike(f"%{term}%", escape="\\"))

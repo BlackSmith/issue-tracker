@@ -7,12 +7,12 @@ from uuid import UUID
 
 from cryptography.fernet import Fernet
 from markdown_it import MarkdownIt
-from sqlalchemy import exists, or_, select
+from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Activity, Comment, Project, ProjectMember, TicketNotification, User, WorkItem
-from app.permissions import can_view_item
+from app.permissions import can_view_item, project_user_access
 
 parser = MarkdownIt("commonmark")
 
@@ -36,8 +36,7 @@ def eligible_users(project_id):
     return select(User).where(
         User.active.is_(True), User.is_bot.is_(False), User.role.in_(["administrator", "member"]),
         User.email != "",
-        or_(User.role == "administrator", exists().where(
-            ProjectMember.project_id == project_id, ProjectMember.user_id == User.id)))
+        project_user_access(project_id))
 
 
 def enqueue_notification(db, item, actor, summary, *, created=False, previous_assignee_id=None):

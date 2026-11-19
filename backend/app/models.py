@@ -110,6 +110,7 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(150))
     description: Mapped[str] = mapped_column(Text, default="")
     visibility: Mapped[str] = mapped_column(String(20), default="private")
+    default_access: Mapped[str | None] = mapped_column(String(20))
     restrict_ticket_visibility: Mapped[bool] = mapped_column(default=False, server_default=false())
     next_number: Mapped[int] = mapped_column(default=0)
 
