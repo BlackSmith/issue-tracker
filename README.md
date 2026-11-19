@@ -370,7 +370,14 @@ restart the API after changing configuration.
 
 Emails contain the ticket reference/title, actor, change summary, and canonical link.
 Comment notifications link to the discussion without copying the comment body.
-They currently use English. Notification payloads are encrypted in a transactional
+Each email includes both plain-text and HTML alternatives, with clickable ticket
+links in the HTML version. Subjects, interface labels, and generated change summaries
+use the recipient's saved account language (English or Czech), which is restored on
+sign-in. The language is read at delivery time, so subsequent saved preference changes
+also apply to queued messages. User-authored titles, names, filenames, and labels are
+preserved and escaped in HTML. Older already-rendered outbox messages retain their
+original English wording and receive an HTML alternative on delivery.
+Notification payloads are encrypted in a transactional
 database outbox, so rolled-back changes never queue mail. The API polls every 15 seconds
 and retries SMTP failures with exponential backoff for up to eight attempts. Payloads
 are erased after delivery, cancellation, or final failure. Multiple API workers claim

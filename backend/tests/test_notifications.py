@@ -121,7 +121,7 @@ def test_delivery_encryption_retry_and_current_contact_address(notifying, monkey
         row = db.scalar(select(TicketNotification).where(TicketNotification.user_id == people["member"]))
         payload = json.loads(Fernet(settings.mail_encryption_key.encode()).decrypt(row.encrypted_body.encode()))
         assert "Notification test" not in row.encrypted_body
-        assert f"/NT/1" in payload["body"]
+        assert "/NT/1" in payload["url"]
         db.get(User, people["member"]).email = "new-contact@example.com"
         db.commit()
     sent = []
@@ -140,7 +140,7 @@ def test_delivery_encryption_retry_and_current_contact_address(notifying, monkey
     monkeypatch.setattr(mail, "send_message", sent.append)
     notifications.deliver_notifications()
     assert {str(message["To"]) for message in sent} == {"administrator@example.test", "new-contact@example.com"}
-    assert all("NT-1" in str(message["Subject"]) and "/NT/1" in message.get_content() for message in sent)
+    assert all("NT-1" in str(message["Subject"]) and "/NT/1" in message.get_body(preferencelist=("plain",)).get_content() for message in sent)
     with factory() as db:
         assert all(row.delivery_status == "sent" and row.encrypted_body is None for row in db.scalars(select(TicketNotification)))
     notifications.deliver_notifications()
@@ -212,3 +212,100 @@ def test_notification_configuration_is_independent_of_passwords():
     with pytest.raises(ValueError):
         Settings(_env_file=None, password_enabled=False, notifications_enabled=True,
                  smtp_host="mail.example.com", smtp_from="tracker@example.com", mail_encryption_key="invalid")
+
+
+def test_multipart_delivery_uses_each_recipients_latest_language(notifying, monkeypatch):
+    factory, client, people, project = notifying
+    create(client("member"), project)
+    # A saved language change after queueing must affect delivery, independently of the actor.
+    with factory() as db:
+        db.get(User, people["member"]).language = "cs"
+        db.commit()
+    sent = []
+    monkeypatch.setattr(mail, "send_message", sent.append)
+    notifications.deliver_notifications()
+    messages = {str(message["To"]): message for message in sent}
+    for address, language, heading, action, link_label in (
+        ("member@example.test", "cs", "Nový ticket", "vytvořil(a) tento ticket", "Otevřít ticket"),
+        ("administrator@example.test", "en", "New ticket", "created this work item", "Open ticket"),
+    ):
+        message = messages[address]
+        assert message.get_content_type() == "multipart/alternative"
+        assert message["Content-Language"] == language
+        assert heading in str(message["Subject"])
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        html = message.get_body(preferencelist=("html",)).get_content()
+        assert action in plain and action in html
+        assert f'{link_label}: {settings.app_base_url}/NT/1' in plain
+        assert f'href="{settings.app_base_url}/NT/1"' in html
+        assert f'lang="{language}"' in html and link_label in html
+
+
+@pytest.mark.parametrize("summary,expected", [
+    ('updated status from "Open" to "In progress", priority from "Medium" to "High"',
+     'změnil(a): stav z "Otevřeno" na "Probíhá", prioritu z "Střední" na "Vysoká"'),
+    ('updated title, description', 'změnil(a): název, popis'),
+    ('updated labels from ["Open", "High, urgent"] to ["Done"], assignee to "Open"',
+     'změnil(a): štítky z ["Open", "High, urgent"] na ["Done"], řešitele na "Open"'),
+    ('updated assignee from "Member" to Unassigned, due date to Not set, labels to No labels',
+     'změnil(a): řešitele z "Member" na Nepřiřazeno, termín na Nenastaveno, štítky na Žádné štítky'),
+    ('updated type from "Task" to "Bug", status from "Done" to "Canceled"',
+     'změnil(a): typ z "Úkol" na "Chyba", stav z "Hotovo" na "Zrušeno"'),
+    ('checked checklist item #1 "Open" in the description',
+     'zaškrtl(a) položku seznamu úkolů č. 1 "Open" v popisu'),
+    ('unchecked checklist item #2 "High" in a comment',
+     'odškrtl(a) položku seznamu úkolů č. 2 "High" v komentáři'),
+    ('uploaded Open.txt', 'nahrál(a) soubor Open.txt'),
+    ('added a comment', 'přidal(a) komentář'),
+])
+def test_localized_change_summaries_preserve_user_content(summary, expected):
+    from app.notification_email import summary_text
+    assert summary_text(summary, "cs") == expected
+    assert summary_text(summary, "en") == summary
+
+
+def test_html_escapes_user_content_and_preserves_snapshot_and_safe_subject(notifying, monkeypatch):
+    from html.parser import HTMLParser
+    factory, client, people, project = notifying
+    title = '<script>alert("ticket")</script> & "quoted"\nSubject: injected'
+    with factory() as db:
+        db.get(User, people["member"]).name = '<img src=x onerror="alert(1)">'
+        db.commit()
+    item = create(client("member"), project, title=title)
+    # The queued creation email must describe the creation, not this later edit.
+    assert client("administrator").patch(f"/api/v1/items/{item}", json={"title": "Later title"}).status_code == 200
+    sent = []
+    monkeypatch.setattr(mail, "send_message", sent.append)
+    notifications.deliver_notifications()
+    creation = next(message for message in sent if "New ticket" in str(message["Subject"]))
+    html = creation.get_body(preferencelist=("html",)).get_content()
+    assert "&lt;script&gt;" in html and "&lt;img" in html and "&amp;" in html
+    assert "Later title" not in html
+    assert "\n" not in str(creation["Subject"])
+    assert title in creation.get_body(preferencelist=("plain",)).get_content()
+
+    class Links(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            assert tag not in {"script", "img"}
+            if tag == "a":
+                assert dict(attrs)["href"] == f"{settings.app_base_url}/NT/1"
+    Links().feed(html)
+
+
+def test_preexisting_queued_payload_still_delivers_as_multipart(notifying, monkeypatch):
+    factory, client, people, project = notifying
+    create(client("administrator"), project)
+    legacy = {"subject": "[NT-1] New ticket: Legacy", "body": "Legacy <title>\n\nOpen ticket: https://tracker.example.com/NT/1\n"}
+    with factory() as db:
+        row = db.scalar(select(TicketNotification))
+        row.encrypted_body = Fernet(settings.mail_encryption_key.encode()).encrypt(json.dumps(legacy).encode()).decode()
+        db.commit()
+    sent = []
+    monkeypatch.setattr(mail, "send_message", sent.append)
+    notifications.deliver_notifications()
+    assert len(sent) == 1
+    message = sent[0]
+    assert str(message["Subject"]) == legacy["subject"]
+    assert message.get_body(preferencelist=("plain",)).get_content() == legacy["body"]
+    html = message.get_body(preferencelist=("html",)).get_content()
+    assert "&lt;title&gt;" in html and 'href="https://tracker.example.com/NT/1"' in html

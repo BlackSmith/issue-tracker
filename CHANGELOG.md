@@ -27,6 +27,7 @@
 
 - Replace the placeholder brand mark with a ticket-and-check SVG logo and favicon, and redesign sign-in with a responsive split layout, English/Czech copy, and accessible text contrast.
 - Project settings initially focuses the project name instead of the close button, avoiding the automatic circle around X while preserving keyboard focus indicators.
+- Ticket notifications include plain-text and HTML alternatives with clickable canonical links, localized subjects and change summaries in each recipient's saved English/Czech account language at delivery time.
 - Personal settings include language selection and local password management; organization user details include authentication method, login email, and invitation/recovery delivery state.
 - Status badges and assignee avatars/icons are shared across ticket displays and filter controls.
 - Labels use rounded, solid-color badges throughout the interface, with white text on green and darker backgrounds and dark text on light backgrounds.
@@ -56,7 +57,7 @@
 
 ### Verification
 
-- Backend: 180 tests passed.
+- Backend: 198 tests passed.
 - Frontend: 22 tests passed; TypeScript checks and production build passed.
 - PostgreSQL migration and model alignment verified without changing existing user counts.
 - Shared-browser verification covered desktop/mobile layouts, real OIDC sign-in, authorization boundaries, filters, project settings, forms, and application user administration.

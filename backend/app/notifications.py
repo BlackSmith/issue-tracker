@@ -12,6 +12,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Activity, Comment, Project, ProjectMember, TicketNotification, User, WorkItem
+from app.notification_email import render_notification
 from app.permissions import can_view_item, project_user_access
 
 parser = MarkdownIt("commonmark")
@@ -57,13 +58,11 @@ def enqueue_notification(db, item, actor, summary, *, created=False, previous_as
         ids.update(db.scalars(select(User.id).where(User.role == "administrator")))
     project = db.get(Project, item.project_id)
     reference = f"{project.key}-{item.number}"
-    subject = f"[{reference}] {'New ticket' if created else 'Ticket updated'}: {item.title}"
-    # Keep headers single-line even when a title contains line breaks.
-    subject = " ".join(subject.splitlines())
-    body = (f"{reference}: {item.title}\nProject: {project.name}\n\n{actor.name} {summary}.\n\n"
-            f"Open ticket: {settings.app_base_url.rstrip('/')}/{project.key}/{item.number}\n")
+    payload = {"reference": reference, "title": item.title, "project": project.name,
+               "actor": actor.name, "summary": summary, "created": created,
+               "url": f"{settings.app_base_url.rstrip('/')}/{project.key}/{item.number}"}
     encrypted = Fernet(settings.mail_encryption_key.encode()).encrypt(
-        json.dumps({"subject": subject, "body": body}).encode()).decode()
+        json.dumps(payload).encode()).decode()
     for person in db.scalars(eligible_users(item.project_id).where(User.id.in_(ids - {None}))):
         if not can_view_item(db, item, person):
             continue
@@ -92,11 +91,14 @@ def deliver_notifications():
                 row.attempts += 1
                 try:
                     payload = json.loads(Fernet(settings.mail_encryption_key.encode()).decrypt(row.encrypted_body.encode()))
+                    subject, body, html, language = render_notification(payload, user.language)
                     message = EmailMessage()
-                    message["Subject"] = payload["subject"]
+                    message["Subject"] = subject
                     message["From"], message["To"] = settings.smtp_from, user.email
                     message["Message-ID"] = f"<{row.id}@issue-tracker>"
-                    message.set_content(payload["body"])
+                    message.set_content(body)
+                    message.add_alternative(html, subtype="html")
+                    message["Content-Language"] = language
                     send_message(message)
                     row.delivery_status, row.encrypted_body = "sent", None
                 except Exception as exc:
