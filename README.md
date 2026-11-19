@@ -113,6 +113,23 @@ to build and run the API, compiled frontend/reverse proxy, and PostgreSQL.
 See [Deployment and configuration](docs/deployment.md) for setup, environment
 variables, OIDC/Facebook login, local accounts, migrations, and backups.
 
+### Published Docker images
+
+The [Docker images workflow](.github/workflows/docker.yml) builds both Dockerfile
+targets and publishes them to GitHub Container Registry:
+
+- `ghcr.io/blacksmith/issue-tracker-api:<tag>`
+- `ghcr.io/blacksmith/issue-tracker-frontend:<tag>`
+
+Every push to `master` publishes the `devel` tag. Pushing a Git tag publishes
+images with that version tag (for example, `v1.2.3`). Git tag names are normalized
+to valid Docker tags by Docker Metadata Action. Pull requests targeting `master`
+build both images without publishing them. Builds target Linux/amd64.
+
+Publishing uses the automatic `GITHUB_TOKEN` with `packages: write`; no additional
+registry secret is required. Repository or organization settings must allow this
+permission. Package visibility and pull access are managed in GitHub's package settings.
+
 ## Development setup
 
 Use the existing VS Code Dev Container. See [environment details](.devcontainer/README.md)

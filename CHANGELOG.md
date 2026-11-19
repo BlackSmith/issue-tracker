@@ -4,6 +4,7 @@
 
 ### Added
 
+- GitHub Actions builds for API and frontend Docker images, publishing `devel` on pushes to `master` and version tags on Git tag pushes to GHCR, with build-only validation for pull requests.
 - English application screenshots and a README showcase covering the project workspace, ticket details, visual editing, and sign-in.
 - Multi-stage Docker images for the API and compiled frontend, an example Compose deployment with PostgreSQL and automatic migrations, and deployment/environment configuration documentation.
 - Owner-configurable default project access (Reporter or Read-only) for active human application members, with explicit-role precedence, consistent API/reference/attachment/notification permissions, English/Czech settings, and migration `0016` preserving closed access for existing projects.
