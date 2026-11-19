@@ -30,11 +30,12 @@ from app.providers import OIDCProvider, FacebookProvider
 from app.passwords import router as passwords_router, establish_session, auth_details
 from app.mail import mail_loop
 from app.notifications import enqueue_notification
+from app.permissions import can_view_item, visible_item
 from app.profiles import avatar_url, profile_json, router as profile_router
 from app.references import router as references_router
 from app.tokens import router as tokens_router
 from app.bots import router as bots_router
-from app.schemas import ApplicationUserUpdate, ChecklistUpdate, CommentCreate, ItemCreate, ItemUpdate, ItemType, LabelCreate, MemberCreate, Priority, ProjectCreate, ProjectUpdate, Status
+from app.schemas import ApplicationUserUpdate, ChecklistUpdate, CommentCreate, ItemCreate, ItemUpdate, ItemType, LabelCreate, MemberCreate, Priority, ProjectCreate, ProjectUpdate, Status, TicketPublication
 from app.security import ServerSessionMiddleware, browser_user, csrf, maybe_user, organization_user
 
 settings = get_settings()
@@ -101,7 +102,11 @@ def item_access(db, item_id, user, write=False):
     item = db.get(WorkItem, item_id)
     if not item:
         raise HTTPException(404, "Work item not found")
-    project = project_access(db, item.project_id, user, write)
+    project = project_access(db, item.project_id, user)
+    if not can_view_item(db, item, user):
+        raise HTTPException(404, "Work item not found")
+    if write:
+        project_access(db, item.project_id, user, write=True)
     return item, project
 
 
@@ -110,6 +115,7 @@ def project_json(project, user, db):
     can_write = (user.role == "administrator" and not user.is_bot) or (member is not None and member.role in {"owner", "reporter"})
     return {"id": project.id, "key": project.key, "slug": project.key, "legacy_slug": project.slug if project.slug != project.key else None, "name": project.name,
             "description": project.description, "visibility": project.visibility, "can_write": can_write,
+            "restrict_ticket_visibility": project.restrict_ticket_visibility,
             "can_manage": can_manage_project(user, member)}
 
 
@@ -117,6 +123,7 @@ def item_json(item, project):
     return {"id": item.id, "project_id": item.project_id, "project_slug": project.key,
             "number": item.number, "web_url": f"/{project.key}/{item.number}", "reference": f"{project.key}-{item.number}",
              "description_version": content_version(item.description),
+            "is_project_public": item.is_project_public,
             "assignee_id": item.assignee_id, "assignee": assignee_json(item.assignee) if item.assignee else None,
              **{key: getattr(item, key) for key in ("title", "description", "type", "status", "priority", "labels", "due_date", "created_at", "updated_at")}}
 
@@ -243,7 +250,7 @@ def create_project(payload: ProjectCreate, user: User = Depends(organization_use
 @app.put(api + "/projects/{project_id}", dependencies=[Depends(csrf)], tags=["Projects"])
 def update_project(project_id: str, payload: ProjectUpdate, user: User = Depends(organization_user), db: Session = Depends(get_db)):
     project = project_access(db, project_id, user, manage=True)
-    for field, value in payload.model_dump().items():
+    for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(project, field, value)
     db.commit()
     return project_json(project, user, db)
@@ -428,7 +435,7 @@ def delete_label(label_id: str, project_id: str | None = None, user: User = Depe
 @app.get(api + "/projects/{project_id}/item-assignees", tags=["Work items"])
 def item_assignees(project_id: str, user: User = Depends(organization_user), db: Session = Depends(get_db)):
     project_access(db, project_id, user)
-    assigned = select(WorkItem.assignee_id).where(WorkItem.project_id == project_id)
+    assigned = select(WorkItem.assignee_id).join(Project).where(WorkItem.project_id == project_id, visible_item(user))
     return [assignee_json(person) for person in db.scalars(
         select(User).where(User.id.in_(assigned)).order_by(User.name, User.id))]
 
@@ -444,7 +451,7 @@ def items(project_id: str, q: str = Query("", max_length=200), status: list[Stat
           page: int = Query(1, ge=1), per_page: int = Query(25, ge=1, le=100),
           user: User = Depends(organization_user), db: Session = Depends(get_db)):
     project = project_access(db, project_id, user)
-    query = select(WorkItem).where(WorkItem.project_id == project_id)
+    query = select(WorkItem).join(Project).where(WorkItem.project_id == project_id, visible_item(user))
     if q:
         escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         query = query.where(or_(WorkItem.title.ilike(f"%{escaped}%", escape="\\"), WorkItem.description.ilike(f"%{escaped}%", escape="\\")))
@@ -512,8 +519,27 @@ def get_item_by_number(project_slug: str, number: int, user: User = Depends(orga
             raise HTTPException(404, "Work item not found") from exc
         raise
     item = db.scalar(select(WorkItem).where(WorkItem.project_id == project.id, WorkItem.number == number))
-    if not item:
+    if not item or not can_view_item(db, item, user):
         raise HTTPException(404, "Work item not found")
+    return item_json(item, project)
+
+
+@app.put(api + "/items/{item_id}/publication", dependencies=[Depends(csrf)], tags=["Work items"])
+def publish_item(item_id: str, payload: TicketPublication, user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    item, project = item_access(db, item_id, user)
+    project_access(db, project.id, user, manage=True)
+    if not project.restrict_ticket_visibility:
+        raise HTTPException(409, "Enable restricted ticket visibility before changing ticket publication")
+    item = db.scalar(select(WorkItem).where(WorkItem.id == item_id).with_for_update()
+                     .execution_options(populate_existing=True))
+    if item.is_project_public != payload.is_project_public:
+        item.is_project_public = payload.is_project_public
+        item.updated_at = utcnow()
+        summary = ("published this ticket to project members" if item.is_project_public else
+                   "restricted this ticket to its author and assignee")
+        db.add(Activity(item_id=item.id, author_id=user.id, message=summary))
+        enqueue_notification(db, item, user, summary)
+    db.commit()
     return item_json(item, project)
 
 

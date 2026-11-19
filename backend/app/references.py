@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Project, ProjectMember, User, WorkItem
 from app.profiles import avatar_url
+from app.permissions import visible_item
 from app.security import organization_user
 
 router = APIRouter(prefix="/api/v1/references", tags=["References"])
@@ -72,7 +73,7 @@ def get_user_reference(user_id: UUID, user: User = Depends(organization_user), d
 def suggest_tickets(q: str = Query("", max_length=200), project_id: str | None = None,
                     user: User = Depends(organization_user), db: Session = Depends(get_db)):
     project = context_project(db, user, project_id)
-    query = select(WorkItem, Project).join(Project).where(visible_project(user))
+    query = select(WorkItem, Project).join(Project).where(visible_project(user), visible_item(user))
     term = q.lstrip("#").strip()
     full_reference = re.fullmatch(r"([a-zA-Z][a-zA-Z0-9]{1,9})-([0-9]+)", term)
     if (term.isascii() and term.isdigit()) or full_reference:
@@ -106,7 +107,7 @@ def resolve_references(payload: ResolveReferences, user: User = Depends(organiza
     # Store only stable reference IDs in Markdown. Resolve live labels and states
     # under the viewer's permissions instead of persisting private ticket titles.
     tickets = db.execute(select(WorkItem, Project).join(Project).where(
-        WorkItem.id.in_([str(value) for value in payload.tickets]), visible_project(user))) if payload.tickets else []
+        WorkItem.id.in_([str(value) for value in payload.tickets]), visible_project(user), visible_item(user))) if payload.tickets else []
     people = db.scalars(select(User).where(User.id.in_([str(value) for value in payload.users]),
                                          User.active.is_(True), User.role.is_not(None))) if payload.users else []
     return {"tickets": [ticket_reference(item, project) for item, project in tickets],

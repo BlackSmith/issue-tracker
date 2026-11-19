@@ -110,6 +110,7 @@ class Project(Base):
     name: Mapped[str] = mapped_column(String(150))
     description: Mapped[str] = mapped_column(Text, default="")
     visibility: Mapped[str] = mapped_column(String(20), default="private")
+    restrict_ticket_visibility: Mapped[bool] = mapped_column(default=False, server_default=false())
     next_number: Mapped[int] = mapped_column(default=0)
 
 
@@ -146,6 +147,7 @@ class WorkItem(Base):
     assignee_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
     assignee: Mapped[User | None] = relationship(foreign_keys=[assignee_id], lazy="selectin")
     author_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    is_project_public: Mapped[bool] = mapped_column(default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

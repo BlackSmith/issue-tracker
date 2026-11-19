@@ -53,6 +53,7 @@ class ProjectCreate(BaseModel):
     slug: str | None = Field(default=None, description="Deprecated: the URL is derived from key. If supplied, must equal key.")
     description: str = Field(default="", max_length=10000)
     visibility: Literal["organization", "private"] = "private"
+    restrict_ticket_visibility: StrictBool = False
 
     @field_validator("key")
     @classmethod
@@ -74,6 +75,7 @@ class ProjectUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     description: str = Field(max_length=10000)
     visibility: Literal["organization", "private"]
+    restrict_ticket_visibility: StrictBool = False
 
     @field_validator("name")
     @classmethod
@@ -149,6 +151,11 @@ class ItemUpdate(ItemCreate):
         if isinstance(values, dict) and any(value is None and key not in {"due_date", "assignee_id"} for key, value in values.items()):
             raise ValueError("Only due_date and assignee_id can be null")
         return values
+
+
+class TicketPublication(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    is_project_public: StrictBool
 
 
 class CommentCreate(BaseModel):

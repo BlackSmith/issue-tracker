@@ -191,7 +191,7 @@ function itemCreated(item: WorkItem) {
         <div v-else-if="!loading" class="empty-state"><span class="empty-icon">▦</span><h2>{{ t(hasProjectRoute ? 'Project not found' : 'Welcome to your workspace') }}</h2><p>{{ t(hasProjectRoute ? 'This project does not exist or you do not have access to it.' : auth.user?.role === 'administrator' ? 'A project brings your team’s work together. Create one to get started.' : 'Ask an application admin or project owner to grant you access to a project.') }}</p></div>
       </template>
       <div v-if="ticketRoute && !itemId && loading" class="empty-state">{{ t('Loading work item…') }}</div>
-      <ItemDetail v-if="itemId" :key="itemId" :item-id="itemId" :can-write="project?.can_write || false" :standalone="standalone" @close="closeItem" @updated="load" />
+      <ItemDetail v-if="itemId" :key="itemId" :item-id="itemId" :can-write="project?.can_write || false" :can-manage="project?.can_manage || false" :restrict-ticket-visibility="project?.restrict_ticket_visibility || false" :standalone="standalone" @close="closeItem" @updated="load" />
       <NewItem v-if="creatingItem && project" :key="project.id" :project="project" :standalone="standalone" @close="closeItem" @toggle-view="setCreationView" @created="itemCreated" />
       <div v-else-if="creatingItem && standalone" class="empty-state"><h2>{{ t(loading ? 'Loading project…' : 'Project not found') }}</h2><p v-if="!loading">{{ t('This project does not exist or you do not have access to it.') }}</p></div>
     </main>

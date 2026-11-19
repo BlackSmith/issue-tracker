@@ -23,6 +23,12 @@ and Czech; API field names and enum values remain English.
   assigned projects. Application admins are permanent owners of every project,
   including projects without an explicit membership row. They cannot be removed
   or demoted through project membership APIs. Creators receive an explicit Owner row.
+- Projects can restrict Reporter and Read-only access to authored or assigned tickets.
+  With this option enabled, Owners and application admins can publish individual
+  tickets to all project members from the ticket's visibility section and revoke
+  publication later. Publication preserves each member's read/write role and never
+  grants access outside the project. API tokens, references, attachments, and email
+  notifications follow the same visibility rules.
 - Personal settings for display name, contact email, profile picture, interface
   accent color, application background, and English/Czech interface language. Green is the default accent.
 - Project-scoped work item numbers, visually edited descriptions, types, fixed statuses,

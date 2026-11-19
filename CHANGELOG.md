@@ -4,6 +4,8 @@
 
 ### Added
 
+- Owner-managed publication of individual tickets to all project members in restricted projects, with reversible detail controls, activity history, and migration `0015` defaulting existing tickets to unpublished.
+- Opt-in project setting restricting Reporter and Read-only ticket visibility to authored or assigned tickets, enforced across API access, references, attachments, and email notifications; migration `0014` preserves unrestricted defaults.
 - Configurable OIDC and Facebook providers through TOML with environment overrides, alongside administrator-created local password accounts with Argon2id, single-use invitations, password changes, and administrator-controlled recovery.
 - Encrypted SMTP outboxes with bounded delivery retries, development Mailpit support, and migrations `0010`/`0011` for local credentials, password links, session revocation versions, and login throttling.
 - English and Czech interface localization with account-scoped language preferences, localized validation/activity rendering, and migration `0012`.
@@ -20,6 +22,7 @@
 
 ### Changed
 
+- Project settings initially focuses the project name instead of the close button, avoiding the automatic circle around X while preserving keyboard focus indicators.
 - Personal settings include language selection and local password management; organization user details include authentication method, login email, and invitation/recovery delivery state.
 - Status badges and assignee avatars/icons are shared across ticket displays and filter controls.
 - Labels use rounded, solid-color badges throughout the interface, with white text on green and darker backgrounds and dark text on light backgrounds.
@@ -49,7 +52,7 @@
 
 ### Verification
 
-- Backend: 168 tests passed.
+- Backend: 180 tests passed.
 - Frontend: 22 tests passed; TypeScript checks and production build passed.
 - PostgreSQL migration and model alignment verified without changing existing user counts.
 - Shared-browser verification covered desktop/mobile layouts, real OIDC sign-in, authorization boundaries, filters, project settings, forms, and application user administration.

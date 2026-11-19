@@ -17,6 +17,7 @@ function display(field: string, raw: string): string {
 export function activityText(message: string): string {
   if (language.value === 'en') return message
   if (message === 'created this work item') return t('created this work item')
+  if (message === 'published this ticket to project members' || message === 'restricted this ticket to its author and assignee') return t(message)
   if (message.startsWith('uploaded ')) return t('uploaded {filename}', { filename: message.slice(9) })
   const checklist = /^(checked|unchecked) checklist item #(\d+) "([\s\S]*)" in (a comment|the description)$/.exec(message)
   if (checklist) return t('{action} checklist item #{number} "{label}" in {source}', {

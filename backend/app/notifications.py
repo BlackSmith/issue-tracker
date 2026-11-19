@@ -12,6 +12,7 @@ from sqlalchemy import exists, or_, select
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Activity, Comment, Project, ProjectMember, TicketNotification, User, WorkItem
+from app.permissions import can_view_item
 
 parser = MarkdownIt("commonmark")
 
@@ -65,6 +66,8 @@ def enqueue_notification(db, item, actor, summary, *, created=False, previous_as
     encrypted = Fernet(settings.mail_encryption_key.encode()).encrypt(
         json.dumps({"subject": subject, "body": body}).encode()).decode()
     for person in db.scalars(eligible_users(item.project_id).where(User.id.in_(ids - {None}))):
+        if not can_view_item(db, item, person):
+            continue
         db.add(TicketNotification(item_id=item.id, user_id=person.id, encrypted_body=encrypted,
                                  next_attempt_at=int(time.time())))
 
@@ -84,7 +87,7 @@ def deliver_notifications():
                 .with_for_update(skip_locked=True).limit(1)):
             item = db.get(WorkItem, row.item_id)
             user = db.scalar(eligible_users(item.project_id).where(User.id == row.user_id)) if item else None
-            if not user:
+            if not user or not can_view_item(db, item, user):
                 row.delivery_status, row.encrypted_body = "canceled", None
             else:
                 row.attempts += 1

@@ -4,7 +4,7 @@ export interface User {
   is_bot: boolean
   language: 'en' | 'cs'
 }
-export interface Project { id: string; key: string; slug: string; legacy_slug?: string | null; name: string; description: string; visibility: string; can_write: boolean; can_manage: boolean }
+export interface Project { id: string; key: string; slug: string; legacy_slug?: string | null; name: string; description: string; visibility: string; restrict_ticket_visibility: boolean; can_write: boolean; can_manage: boolean }
 export interface Assignee { id: string; name: string; avatar_url: string | null; is_bot: boolean }
 export interface LabelDefinition { id: string; project_id: string | null; name: string; color: string; description: string }
 export interface WorkItem {
@@ -12,6 +12,7 @@ export interface WorkItem {
   reference: string; title: string; description: string; description_version: string
   type: string; status: string; priority: string; labels: string[]; due_date: string | null
   assignee_id: string | null; assignee: Assignee | null
+  is_project_public: boolean
   created_at: string; updated_at: string
 }
 export interface Discussion { id: string; kind: string; author: string; author_is_bot: boolean; avatar_url: string | null; body: string; body_version: string | null; created_at: string }

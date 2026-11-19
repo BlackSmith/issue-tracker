@@ -13,7 +13,7 @@ import { dateOnly, dateTime, t } from '../i18n'
 import { activityText } from '../activity'
 const RichTextEditor = defineAsyncComponent(() => import('./RichTextEditor.vue'))
 
-const props = defineProps<{ itemId: string; canWrite: boolean; standalone: boolean }>()
+const props = defineProps<{ itemId: string; canWrite: boolean; canManage: boolean; restrictTicketVisibility: boolean; standalone: boolean }>()
 const emit = defineEmits<{ close: []; updated: [] }>()
 const route = useRoute(), router = useRouter()
 function openFullscreen() {
@@ -95,6 +95,16 @@ async function editContent() {
   await nextTick()
   titleInput.value?.$el.focus()
 }
+async function togglePublication() {
+  if (!item.value || !props.canManage || busy.value || checklistBusy.value) return
+  busy.value = true; error.value = ''
+  try {
+    item.value = await api<WorkItem>(`/items/${props.itemId}/publication`, {
+      method: 'PUT', body: JSON.stringify({ is_project_public: !item.value.is_project_public }),
+    })
+    await load(); emit('updated')
+  } catch (e) { error.value = (e as Error).message } finally { busy.value = false }
+}
 function cancelContent() {
   if (busy.value || descriptionUploading.value) return
   editingContent.value = false; error.value = ''
@@ -172,6 +182,7 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
       </section>
         </div>
         <aside class="detail-metadata" :aria-label="t('Work item metadata')">
+          <section v-if="restrictTicketVisibility" class="ticket-publication"><h3>{{ t('Ticket visibility') }}</h3><p>{{ t(item.is_project_public ? 'All project members' : 'Author, assignee and project owners') }}</p><PButton v-if="canManage" type="button" severity="secondary" outlined :disabled="busy || checklistBusy" @click="togglePublication">{{ t(item.is_project_public ? 'Restrict ticket visibility' : 'Publish to project members') }}</PButton></section>
           <section><ItemField :label="t('Status')" kind="status" :value="item.status" :options="statuses" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('status', value)" @editing="error = ''"><StatusBadge :status="item.status" /></ItemField></section>
           <section><ItemField :label="t('Type')" kind="select" :value="item.type" :options="itemTypes" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('type', value)" @editing="error = ''"><span>{{ t(item.type) }}</span></ItemField></section>
           <section><ItemField :label="t('Priority')" kind="select" :value="item.priority" :options="priorities" :can-write="canWrite" :disabled="busy || checklistBusy" :save="value => saveField('priority', value)" @editing="error = ''"><span class="priority" :class="item.priority.toLowerCase()">{{ t(item.priority) }}</span></ItemField></section>
