@@ -26,6 +26,7 @@
 
 ### Changed
 
+- Default interface language follows the browser's preferred supported language, including regional variants, while saved browser and account preferences retain precedence.
 - Replace the placeholder brand mark with a ticket-and-check SVG logo and favicon, and redesign sign-in with a responsive split layout, English/Czech copy, and accessible text contrast.
 - Project settings initially focuses the project name instead of the close button, avoiding the automatic circle around X while preserving keyboard focus indicators.
 - Ticket notifications include plain-text and HTML alternatives with clickable canonical links, localized subjects and change summaries in each recipient's saved English/Czech account language at delivery time.

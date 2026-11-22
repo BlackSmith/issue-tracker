@@ -5,7 +5,16 @@ export type Language = 'en' | 'cs'
 export const languages: { value: Language; label: string }[] = [{ value: 'en', label: 'English' }, { value: 'cs', label: 'Čeština' }]
 const storageKey = 'tracker.language'
 function initialLanguage(): Language {
-  try { if (localStorage.getItem(storageKey) === 'cs') return 'cs' } catch { /* Storage may be unavailable. */ }
+  try {
+    const stored = localStorage.getItem(storageKey)
+    if (stored === 'en' || stored === 'cs') return stored
+  } catch { /* Storage may be unavailable. */ }
+  if (typeof navigator !== 'undefined') {
+    for (const locale of navigator.languages?.length ? navigator.languages : [navigator.language]) {
+      const preferred = locale?.toLowerCase().split('-')[0]
+      if (preferred === 'en' || preferred === 'cs') return preferred
+    }
+  }
   return 'en'
 }
 export const language = ref<Language>(initialLanguage())
