@@ -33,6 +33,7 @@ const contentOriginal = ref({ title: '', description: '' })
 const contentConflict = computed(() => editingContent.value && item.value &&
   (item.value.title !== contentOriginal.value.title || item.value.description !== contentOriginal.value.description))
 const titleInput = ref<{ $el: HTMLInputElement } | null>(null)
+const notificationToggle = ref<HTMLElement | null>(null)
 const copyStatus = ref('')
 const headerReference = computed(() => item.value?.reference.replace(/-(\d+)$/, '#$1'))
 async function copyLink() {
@@ -205,7 +206,12 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
 <template>
   <div v-if="!standalone" class="panel-shade" @click="emit('close')"></div>
   <section class="detail-panel" :class="{ standalone }" :role="standalone ? undefined : 'dialog'" :aria-label="t('Work item detail')" @keydown.esc="emit('close')">
-    <header class="detail-top"><div class="detail-reference"><RouterLink v-if="item" :to="item.web_url" :title="t('Open standalone page')">{{ headerReference }}</RouterLink><span v-else>{{ t('Work item') }}</span><PButton v-if="item" class="quiet copy-ticket-link" :aria-label="t('Copy ticket link')" :title="t(copyStatus || 'Copy ticket link')" @click="copyLink"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path v-if="copyStatus === 'Link copied'" d="m5 12 4 4L19 6" /><template v-else><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4" /></template></svg></PButton><span class="sr-only" role="status">{{ t(copyStatus) }}</span></div><div><PButton v-if="item && canWrite && !editingContent" class="quiet detail-edit" :disabled="busy || checklistBusy" :aria-label="t('Edit ticket')" @click="editContent">{{ t('Edit') }}</PButton>
+    <header class="detail-top"><div class="detail-reference"><RouterLink v-if="item" :to="item.web_url" :title="t('Open standalone page')">{{ headerReference }}</RouterLink><span v-else>{{ t('Work item') }}</span><PButton v-if="item" class="quiet copy-ticket-link" :aria-label="t('Copy ticket link')" :title="t(copyStatus || 'Copy ticket link')" @click="copyLink"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path v-if="copyStatus === 'Link copied'" d="m5 12 4 4L19 6" /><template v-else><rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h4" /></template></svg></PButton><span class="sr-only" role="status">{{ t(copyStatus) }}</span></div><div>
+    <PButton v-if="item && canWrite && !editingContent" type="button" class="quiet detail-edit" :disabled="busy || checklistBusy" :aria-label="t('Edit ticket')" @click="editContent">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 6.5l4 4M4 20l4.5-1 12-12a2.8 2.8 0 0 0-4-4l-12 12L4 20z" /></svg>
+      {{ t('Edit') }}
+    </PButton>
+    <span v-if="item" ref="notificationToggle"></span>
     <PButton v-if="!standalone && item" type="button" class="quiet detail-fullscreen" :aria-label="t('Open fullscreen')" :title="t('Open fullscreen')" @click="openFullscreen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 10l7-7m-6 0h6v6M10 14l-7 7m0-6v6h6" /></svg></PButton>
     <PButton class="quiet" @click="emit('close')" :aria-label="t(standalone ? 'Back to project' : 'Close detail')">{{ standalone ? t('← Back') : '×' }}</PButton></div></header>
     <div v-if="error" class="error banner" role="alert">{{ t(error) }}</div>
@@ -253,7 +259,7 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
           <section><ItemField :label="t('Due date')" kind="date" :value="item.due_date || ''" :can-write="canWrite" :disabled="busy || checklistBusy" :save="saveField('due_date')" @editing="error = ''"><span>{{ item.due_date ? dateOnly(item.due_date) : t('Not set') }}</span></ItemField></section>
           <section><ItemField :label="t('Labels')" kind="labels" :value="JSON.stringify(item.labels)" :label-definitions="labels" :can-write="canWrite" :disabled="busy || checklistBusy || !labelsReady" :save="saveField('labels')" @editing="error = ''"><div v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></div><span v-else class="muted">{{ t('None') }}</span></ItemField></section>
           <section><ItemField :label="t('Assignee')" kind="select" :value="item.assignee_id || ''" :options="assigneeOptions" :can-write="canWrite" :disabled="busy || checklistBusy || !assigneesReady" :save="saveField('assignee_id')" @editing="error = ''"><span v-if="item.assignee" class="assignee-value"><UserAvatar :name="item.assignee.name" :src="item.assignee.avatar_url" /><span>{{ item.assignee.name }} <span v-if="item.assignee.is_bot" class="bot-badge">{{ t('Bot') }}</span></span></span><span v-else class="muted">{{ t('Unassigned') }}</span></ItemField></section>
-          <NotificationSettings :item-id="itemId" />
+          <NotificationSettings :item-id="itemId" :toggle-target="notificationToggle" />
         </aside>
       </div>
     </div>
@@ -266,4 +272,7 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
 .attachment-row a { flex: 1; min-width: 0; }
 .attachment-row small { white-space: nowrap; }
 .attachment-row button { flex-shrink: 0; }
+@media (max-width: 720px) {
+  .detail-top > div:last-child { gap: 8px; }
+}
 </style>

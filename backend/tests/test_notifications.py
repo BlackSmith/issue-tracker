@@ -336,6 +336,40 @@ def test_subscription_overrides_project_and_adds_readonly_participant(notifying)
     assert admin.get(project_path).json()["enabled"] is True
 
 
+def test_ticket_defaults_for_author_and_mentions_with_project_notifications_muted(notifying, monkeypatch):
+    factory, client, people, project = notifying
+    admin, member, reader = client("administrator"), client("member"), client("reader")
+    project_path = f"/api/v1/projects/{project}/notifications"
+    for person in (admin, member, reader):
+        assert person.put(project_path, json={"enabled": False}).status_code == 200
+    item = create(admin, project, description=f'[@user](/users/{people["member"]})')
+    ticket_path = f"/api/v1/items/{item}/notifications"
+    assert queued(factory, clear=True) == {people["administrator"], people["member"]}
+    for person in (admin, member):
+        preference = person.get(ticket_path).json()
+        assert preference["enabled"] is None and preference["default_enabled"] is True
+        assert {entry["id"] for entry in preference["participants"]} == {people["administrator"], people["member"]}
+    assert reader.get(ticket_path).json()["default_enabled"] is False
+    assert reader.put(project_path, json={"enabled": True}).status_code == 200
+    assert reader.get(ticket_path).json()["default_enabled"] is False
+    assert reader.put(project_path, json={"enabled": False}).status_code == 200
+
+    mention = f'[@user](/users/{people["reader"]})'
+    assert admin.post(f"/api/v1/items/{item}/comments", json={"body": mention}).status_code == 201
+    assert reader.get(ticket_path).json()["default_enabled"] is True
+    assert queued(factory, clear=True) == {people["administrator"], people["member"], people["reader"]}
+    assert admin.patch(f"/api/v1/items/{item}", json={"description": ""}).status_code == 200
+    assert member.get(ticket_path).json()["default_enabled"] is False
+    assert queued(factory) == {people["administrator"], people["reader"]}
+    sent = []
+    monkeypatch.setattr(mail, "send_message", sent.append)
+    notifications.deliver_notifications()
+    assert {str(message["To"]) for message in sent} == {"administrator@example.test", "reader@example.test"}
+    assert admin.put(ticket_path, json={"enabled": False}).json()["enabled"] is False
+    reset = admin.put(ticket_path, json={"enabled": None}).json()
+    assert reset["enabled"] is None and reset["default_enabled"] is True
+
+
 @pytest.mark.parametrize("direct", ["assignee", "description", "comment", None])
 def test_muting_exceptions_and_delivery_recheck(notifying, monkeypatch, direct):
     factory, client, people, project = notifying

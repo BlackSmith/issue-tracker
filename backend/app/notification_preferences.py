@@ -5,11 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Activity, Comment, ProjectNotificationPreference, TicketNotificationPreference, User
+from app.models import ProjectNotificationPreference, TicketNotificationPreference, User
 from app.permissions import project_user_access
 from app.profiles import avatar_url
 from app.security import browser_user, csrf
-from app.notifications import can_subscribe_project
+from app.notifications import can_subscribe_project, direct_recipients, ticket_participants, ticket_subscribers
 
 router = APIRouter(prefix="/api/v1", tags=["Notifications"])
 
@@ -24,15 +24,15 @@ def preference_json(db, user, project, item=None):
     if item is None:
         return {"enabled": project_enabled}
     ticket = db.get(TicketNotificationPreference, (item.id, user.id))
-    ids = {item.author_id, item.assignee_id}
-    ids.update(db.scalars(select(Activity.author_id).where(Activity.item_id == item.id)))
-    ids.update(db.scalars(select(Comment.author_id).where(Comment.item_id == item.id)))
-    ids.update(db.scalars(select(TicketNotificationPreference.user_id).where(
-        TicketNotificationPreference.item_id == item.id, TicketNotificationPreference.enabled.is_(True))))
-    participants = db.scalars(select(User).where(User.id.in_(ids - {None}), User.active.is_(True),
+    direct_ids = direct_recipients(db, item)
+    ids = ticket_participants(db, item, direct_ids)
+    default_enabled = user.id == item.author_id or user.id in direct_ids or (project_enabled and user.id in ids)
+    ids.update(ticket_subscribers(db, item))
+    participants = db.scalars(select(User).where(User.id.in_(ids), User.active.is_(True),
                                                 project_user_access(project.id)).order_by(User.name, User.id))
     from app.permissions import can_view_item
     return {"enabled": ticket.enabled if ticket else None, "project_enabled": project_enabled,
+            "default_enabled": default_enabled,
             "participants": [{"id": person.id, "name": person.name, "avatar_url": avatar_url(person)}
                              for person in participants if can_view_item(db, item, person)]}
 

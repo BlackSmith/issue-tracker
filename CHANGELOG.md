@@ -33,6 +33,8 @@
 
 ### Changed
 
+- Ticket authors and users mentioned in saved descriptions or comments default to receiving ticket updates independently of project subscriptions. Comment and activity participants continue to inherit the project preference.
+- Project and ticket notification bells appear in their respective headers. Ticket list and detail controls synchronize immediately after a preference change, and ticket overrides can be reset to the computed default.
 - Ticket attachment lists start collapsed and can be expanded with an accessible count toggle, preserving expansion during live updates.
 - Project subscriptions default to new-ticket announcements for active human members without subscribing them to later changes. Restricted-visibility projects limit project subscriptions and controls to Owners, enforced at enqueue and delivery; unavailable management links are omitted from nonowner email footers.
 - Consecutive ticket activity entries can be collapsed into expandable groups while comments remain visible.
@@ -69,7 +71,7 @@
 
 ### Verification
 
-- Backend: 219 tests passed.
+- Backend: 220 tests passed.
 - Frontend: 23 tests passed; TypeScript checks and production build passed.
 - Notification preferences: PostgreSQL migration `0017` and model alignment verified; shared-browser real OIDC checks covered account isolation, Read-only subscriptions, inheritance/reset, participant display, English/Czech desktop/mobile controls, actual SMTP mute exceptions, and email management links.
 - Project logos: PostgreSQL migration `0018` and model alignment verified; real OIDC browser checks covered Owner/admin upload, replacement/removal, validation, current-access enforcement, preserved settings drafts, and square logo/initial rendering at 1440px, 800px, and 390px in English and Czech.

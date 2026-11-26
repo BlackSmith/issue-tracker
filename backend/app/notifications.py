@@ -49,12 +49,28 @@ def direct_recipients(db, item):
     return ids
 
 
+def ticket_participants(db, item, direct_ids):
+    ids = {item.author_id} | direct_ids
+    ids.update(db.scalars(select(Comment.author_id).where(Comment.item_id == item.id)))
+    ids.update(db.scalars(select(Activity.author_id).where(Activity.item_id == item.id)))
+    return ids - {None}
+
+
+def ticket_subscribers(db, item):
+    return db.scalars(select(TicketNotificationPreference.user_id).where(
+        TicketNotificationPreference.item_id == item.id, TicketNotificationPreference.enabled.is_(True)))
+
+
 def notification_enabled(db, item, user_id, direct_ids=None):
     if user_id in (direct_ids if direct_ids is not None else direct_recipients(db, item)):
         return True
     ticket = db.get(TicketNotificationPreference, (item.id, user_id))
+    if ticket:
+        return ticket.enabled
+    if user_id == item.author_id:
+        return True
     project = db.get(ProjectNotificationPreference, (item.project_id, user_id))
-    return ticket.enabled if ticket else project.enabled if project else True
+    return project.enabled if project else True
 
 
 def can_subscribe_project(db, project, user):
@@ -68,16 +84,13 @@ def enqueue_notification(db, item, actor, summary, *, created=False, previous_as
         return
     # Flush the comment/activity and relationship changes before finding participants.
     db.flush()
-    ids = {item.author_id, item.assignee_id, previous_assignee_id}
-    ids.update(db.scalars(select(Comment.author_id).where(Comment.item_id == item.id)))
-    ids.update(db.scalars(select(Activity.author_id).where(Activity.item_id == item.id)))
-    ids.update(db.scalars(select(TicketNotificationPreference.user_id).where(
-        TicketNotificationPreference.item_id == item.id, TicketNotificationPreference.enabled.is_(True))))
-    ids.update(mentioned_users(item.description))
-    for body in db.scalars(select(Comment.body).where(Comment.item_id == item.id)):
-        ids.update(mentioned_users(body))
+    direct_ids = direct_recipients(db, item)
+    participant_ids = ticket_participants(db, item, direct_ids)
+    participant_ids.update(ticket_subscribers(db, item))
+    if previous_assignee_id:
+        participant_ids.add(previous_assignee_id)
+    ids = participant_ids.copy()
     project = db.get(Project, item.project_id)
-    participant_ids = ids - {None}
     if created:
         ids.update(person.id for person in db.scalars(eligible_users(item.project_id))
                    if can_subscribe_project(db, project, person))
@@ -89,8 +102,7 @@ def enqueue_notification(db, item, actor, summary, *, created=False, previous_as
         json.dumps(payload).encode()).decode()
     project_encrypted = Fernet(settings.mail_encryption_key.encode()).encrypt(
         json.dumps({**payload, "project_subscription": True}).encode()).decode() if created else encrypted
-    direct_ids = direct_recipients(db, item)
-    for person in db.scalars(eligible_users(item.project_id).where(User.id.in_(ids - {None}))):
+    for person in db.scalars(eligible_users(item.project_id).where(User.id.in_(ids))):
         if not can_view_item(db, item, person) or not notification_enabled(db, item, person.id, direct_ids):
             continue
         db.add(TicketNotification(item_id=item.id, user_id=person.id,
