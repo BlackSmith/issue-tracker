@@ -15,6 +15,16 @@ beforeEach(() => {
 })
 afterEach(() => { mock.restoreAll(); delete globalThis.document })
 
+test('a successful attachment deletion accepts an empty 204 response', async () => {
+  fetch.mock.mockImplementation(async (path, options) => {
+    assert.equal(path, '/api/v1/items/item-id/attachments/attachment-id')
+    assert.equal(options.method, 'DELETE')
+    assert.equal(options.headers.get('X-CSRF-Token'), auth.csrf)
+    return new Response(null, { status: 204 })
+  })
+  assert.equal(await api('/items/item-id/attachments/attachment-id', { method: 'DELETE' }), undefined)
+})
+
 test('an expired session clears the signed-in UI and appearance after an API 401', async () => {
   const paths = []
   fetch.mock.mockImplementation(async path => {

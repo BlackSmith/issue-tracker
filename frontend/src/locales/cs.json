@@ -19,6 +19,8 @@
   "Own tickets are tickets they created or are assigned to. Owners and application admins can see all tickets.": "Vlastní tickety jsou ty, které uživatel vytvořil nebo je má přiřazené. Vlastníci projektu a administrátoři aplikace vidí všechny tickety.",
   "created this work item": "vytvořil(a) tento ticket",
   "uploaded {filename}": "nahrál(a) {filename}",
+  "removed attachment {filename}": "odebral(a) přílohu {filename}",
+  "Remove attachment {filename}": "Odebrat přílohu {filename}",
   "updated {changes}": "změnil(a): {changes}",
   "{field} from {previous} to {current}": "{field} z {previous} na {current}",
   "{field} to {current}": "{field} na {current}",

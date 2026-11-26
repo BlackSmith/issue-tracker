@@ -574,7 +574,7 @@ def update_item(item_id, values, user, db):
     item = db.scalar(select(WorkItem).where(WorkItem.id == item_id).with_for_update()
                      .execution_options(populate_existing=True))
     if "description" in values:
-        confirm_attachments(db, values["description"], item, user)
+        confirm_attachments(db, values["description"], item, user, previous_text=item.description)
     changed = []
     previous_assignee_id = item.assignee_id
     for key, value in values.items():
@@ -716,6 +716,28 @@ async def store_attachment(db, file, user, project_id, item_id, pending):
 def attachments(item_id: str, user: User = Depends(organization_user), db: Session = Depends(get_db)):
     item_access(db, item_id, user)
     return [{"id": a.id, "filename": a.filename, "size": a.size, "url": f"{api}/attachments/{a.id}/download"} for a in db.scalars(select(Attachment).where(Attachment.item_id == item_id, Attachment.pending.is_(False)).order_by(Attachment.created_at))]
+
+
+@app.delete(api + "/items/{item_id}/attachments/{attachment_id}", status_code=204,
+            dependencies=[Depends(csrf)], tags=["Attachments"])
+def remove_attachment(item_id: str, attachment_id: str,
+                      user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    item, _ = item_access(db, item_id, user, True)
+    item = db.scalar(select(WorkItem).where(WorkItem.id == item_id).with_for_update()
+                     .execution_options(populate_existing=True))
+    attachment = db.scalar(select(Attachment).where(
+        Attachment.id == attachment_id, Attachment.item_id == item_id,
+        Attachment.pending.is_(False)
+    ).with_for_update())
+    if not attachment:
+        raise HTTPException(404, "Attachment not found")
+    message = "removed attachment " + attachment.filename
+    db.delete(attachment)
+    item.updated_at = utcnow()
+    db.add(Activity(item_id=item_id, author_id=user.id, message=message))
+    enqueue_notification(db, item, user, message)
+    db.commit()
+    (settings.attachment_dir / attachment_id).unlink(missing_ok=True)
 
 
 @app.get(api + "/attachments/{attachment_id}/download", tags=["Attachments"])

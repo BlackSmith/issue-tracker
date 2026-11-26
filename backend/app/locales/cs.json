@@ -8,6 +8,7 @@
   "created this work item": "vytvořil(a) tento ticket",
   "added a comment": "přidal(a) komentář",
   "uploaded {filename}": "nahrál(a) soubor {filename}",
+  "removed attachment {filename}": "odebral(a) přílohu {filename}",
   "updated {changes}": "změnil(a): {changes}",
   "{field} from {previous} to {current}": "{field} z {previous} na {current}",
   "{field} to {current}": "{field} na {current}",

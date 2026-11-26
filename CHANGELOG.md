@@ -4,6 +4,7 @@
 
 ### Added
 
+- Ticket attachment removal for users with write access, including permission-checked API deletion, English/Czech controls, activity history, and email notifications. Historical content remains editable after a linked attachment is removed.
 - GitHub Actions builds for API and frontend Docker images, publishing `devel` on pushes to `master` and version tags on Git tag pushes to GHCR, with build-only validation for pull requests.
 - English application screenshots and a README showcase covering the project workspace, ticket details, visual editing, and sign-in.
 - Multi-stage Docker images for the API and compiled frontend, an example Compose deployment with PostgreSQL and automatic migrations, and deployment/environment configuration documentation.

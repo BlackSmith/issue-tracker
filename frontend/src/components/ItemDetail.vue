@@ -132,6 +132,15 @@ async function refreshAttachments() {
   } catch (e) { error.value = (e as Error).message }
 }
 
+async function removeAttachment(attachment: Attachment) {
+  if (!props.canWrite || busy.value || checklistBusy.value) return
+  busy.value = true; error.value = ''
+  try {
+    await api(`/items/${props.itemId}/attachments/${attachment.id}`, { method: 'DELETE' })
+    await load(); emit('updated')
+  } catch (e) { error.value = (e as Error).message } finally { busy.value = false }
+}
+
 async function toggleChecklist(index: number, checked: boolean, entry?: Discussion) {
   if (!item.value || !props.canWrite || editingContent.value || busy.value || checklistBusy.value) return
   checklistBusy.value = true
@@ -169,7 +178,7 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
       </form>
       <template v-else><Markdown v-if="item.description" :text="item.description" :project-id="item.project_id" :interactive="canWrite" :busy="busy || checklistBusy" @toggle="(index, checked) => toggleChecklist(index, checked)" /><p v-else class="muted">{{ t('No description yet.') }}</p></template>
       <p v-if="checklistBusy" class="hint" role="status">{{ t('Saving checklist…') }}</p>
-      <section v-if="attachments.length" class="attachments"><h3>{{ t('Attachments') }} <span class="count">{{ attachments.length }}</span></h3><a v-for="a in attachments" :key="a.id" :href="a.url" target="_blank" rel="noopener">↳ {{ a.filename }} <small>{{ Math.max(1, Math.round(a.size / 1024)) }} KB</small></a></section>
+      <section v-if="attachments.length" class="attachments"><h3>{{ t('Attachments') }} <span class="count">{{ attachments.length }}</span></h3><div v-for="a in attachments" :key="a.id" class="attachment-row"><a :href="a.url" target="_blank" rel="noopener">↳ {{ a.filename }} <small>{{ Math.max(1, Math.round(a.size / 1024)) }} KB</small></a><PButton v-if="canWrite" type="button" class="quiet" :disabled="busy || checklistBusy" :aria-label="t('Remove attachment {filename}', { filename: a.filename })" @click="removeAttachment(a)">{{ t('Remove') }}</PButton></div></section>
       <section class="discussion">
         <h2>{{ t('Activity') }}</h2>
         <div v-for="entry in discussion" :key="entry.id" class="discussion-entry" :class="entry.kind"><UserAvatar :name="entry.author" :src="entry.avatar_url" /><div class="discussion-content"><header><strong>{{ entry.author }}</strong><span v-if="entry.author_is_bot" class="bot-badge">{{ t('Bot') }}</span><time>{{ dateTime(entry.created_at) }}</time></header><Markdown v-if="entry.kind === 'comment'" :text="entry.body" :project-id="item.project_id" :interactive="canWrite && !editingContent" :busy="busy || checklistBusy" @toggle="(index, checked) => toggleChecklist(index, checked, entry)" /><p v-else>{{ activityText(entry.body) }}</p></div></div>
@@ -195,3 +204,10 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
     </div>
   </section>
 </template>
+
+<style scoped>
+.attachment-row { display: flex; align-items: center; gap: 8px; }
+.attachment-row a { flex: 1; min-width: 0; }
+.attachment-row small { white-space: nowrap; }
+.attachment-row button { flex-shrink: 0; }
+</style>

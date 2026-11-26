@@ -14,13 +14,16 @@ from app.models import Activity, Attachment, utcnow
 ATTACHMENT_URL = re.compile(r"/api/v1/attachments/([a-f0-9-]{36})/download")
 
 
-def confirm_attachments(db, text, item, user):
+def confirm_attachments(db, text, item, user, *, previous_text=""):
     """Claim uploads atomically with the content save, serialized against cleanup."""
     ids = set(ATTACHMENT_URL.findall(text))
     if not ids:
         return
     rows = list(db.scalars(select(Attachment).where(Attachment.id.in_(ids)).order_by(Attachment.id).with_for_update()))
-    if ids != {row.id for row in rows}:
+    missing = ids - {row.id for row in rows}
+    # Keep historical links editable after explicit removal, but reject new
+    # references to missing/expired uploads or attachments from another ticket.
+    if missing - set(ATTACHMENT_URL.findall(previous_text)):
         raise HTTPException(409, "An attachment has expired or is unavailable. Upload it again.")
     for row in rows:
         if row.pending:

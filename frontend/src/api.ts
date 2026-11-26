@@ -29,7 +29,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     if (path !== '/auth/me' && !headers.has('Authorization')) await reconcileAuthFailure(response.status, message)
     throw new ApiError(response.status, message)
   }
-  return response.json()
+  return response.status === 204 ? undefined as T : response.json()
 }
 
 export function refreshAuth(): Promise<void> {

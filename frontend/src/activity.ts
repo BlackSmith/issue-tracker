@@ -19,6 +19,7 @@ export function activityText(message: string): string {
   if (message === 'created this work item') return t('created this work item')
   if (message === 'published this ticket to project members' || message === 'restricted this ticket to its author and assignee') return t(message)
   if (message.startsWith('uploaded ')) return t('uploaded {filename}', { filename: message.slice(9) })
+  if (message.startsWith('removed attachment ')) return t('removed attachment {filename}', { filename: message.slice(19) })
   const checklist = /^(checked|unchecked) checklist item #(\d+) "([\s\S]*)" in (a comment|the description)$/.exec(message)
   if (checklist) return t('{action} checklist item #{number} "{label}" in {source}', {
     action: t(checklist[1]!), number: checklist[2]!, label: checklist[3]!, source: t(checklist[4]!),

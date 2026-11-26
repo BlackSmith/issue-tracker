@@ -27,6 +27,8 @@ def summary_text(message, language):
         return t(message)
     if message.startswith("uploaded "):
         return t("uploaded {filename}", filename=message[9:])
+    if message.startswith("removed attachment "):
+        return t("removed attachment {filename}", filename=message[19:])
     checklist = re.fullmatch(r'(checked|unchecked) checklist item #(\d+) "([\s\S]*)" in (a comment|the description)', message)
     if checklist:
         action, number, label, source = checklist.groups()
