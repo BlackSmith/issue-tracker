@@ -288,7 +288,9 @@ def test_html_escapes_user_content_and_preserves_snapshot_and_safe_subject(notif
         def handle_starttag(self, tag, attrs):
             assert tag not in {"script", "img"}
             if tag == "a":
-                assert dict(attrs)["href"] == f"{settings.app_base_url}/NT/1"
+                assert dict(attrs)["href"] in {f"{settings.app_base_url}/NT/1",
+                                              f"{settings.app_base_url}/NT/1#notifications",
+                                              f"{settings.app_base_url}/NT/#project-notifications"}
     Links().feed(html)
 
 
@@ -306,6 +308,102 @@ def test_preexisting_queued_payload_still_delivers_as_multipart(notifying, monke
     assert len(sent) == 1
     message = sent[0]
     assert str(message["Subject"]) == legacy["subject"]
-    assert message.get_body(preferencelist=("plain",)).get_content() == legacy["body"]
+    assert message.get_body(preferencelist=("plain",)).get_content().startswith(legacy["body"])
     html = message.get_body(preferencelist=("html",)).get_content()
     assert "&lt;title&gt;" in html and 'href="https://tracker.example.com/NT/1"' in html
+
+
+def test_subscription_overrides_project_and_adds_readonly_participant(notifying):
+    factory, client, people, project = notifying
+    admin, reader = client("administrator"), client("reader")
+    item = create(admin, project)
+    queued(factory, clear=True)
+    project_path = f"/api/v1/projects/{project}/notifications"
+    ticket_path = f"/api/v1/items/{item}/notifications"
+    assert reader.put(project_path, json={"enabled": False}).json() == {"enabled": False}
+    assert reader.get(ticket_path).json()["enabled"] is None
+    response = reader.put(ticket_path, json={"enabled": True})
+    assert response.status_code == 200
+    assert people["reader"] in {p["id"] for p in response.json()["participants"]}
+    assert all(entry["author"] != "reader" for entry in admin.get(f"/api/v1/items/{item}/discussion").json())
+    assert admin.patch(f"/api/v1/items/{item}", json={"priority": "High"}).status_code == 200
+    assert queued(factory, clear=True) == {people["administrator"], people["reader"]}
+    assert reader.put(ticket_path, json={"enabled": False}).status_code == 200
+    admin.patch(f"/api/v1/items/{item}", json={"priority": "Low"})
+    assert queued(factory, clear=True) == {people["administrator"]}
+    assert reader.put(ticket_path, json={"enabled": None}).json()["enabled"] is None
+    assert reader.get(project_path).json()["enabled"] is False
+    assert admin.get(project_path).json()["enabled"] is True
+
+
+@pytest.mark.parametrize("direct", ["assignee", "description", "comment", None])
+def test_muting_exceptions_and_delivery_recheck(notifying, monkeypatch, direct):
+    factory, client, people, project = notifying
+    admin, member = client("administrator"), client("member")
+    mention = f'[@user](/users/{people["member"]})'
+    item = create(member, project, **({"assignee_id": people["member"]} if direct == "assignee" else
+                                    {"description": mention} if direct == "description" else {}))
+    if direct == "comment":
+        queued(factory, clear=True)
+        admin.post(f"/api/v1/items/{item}/comments", json={"body": mention})
+        queued(factory, clear=True)
+        admin.patch(f"/api/v1/items/{item}", json={"priority": "High"})
+    # Mute after queueing: ordinary notifications must be canceled at delivery.
+    assert member.put(f"/api/v1/projects/{project}/notifications", json={"enabled": False}).status_code == 200
+    assert member.put(f"/api/v1/items/{item}/notifications", json={"enabled": False}).status_code == 200
+    sent = []
+    monkeypatch.setattr(mail, "send_message", sent.append)
+    notifications.deliver_notifications()
+    assert ("member@example.test" in {str(m["To"]) for m in sent}) == (direct is not None)
+    with factory() as db:
+        db.execute(delete(TicketNotification))
+        db.commit()
+    admin.patch(f"/api/v1/items/{item}", json={"status": "Done"})
+    assert (people["member"] in queued(factory)) == (direct is not None)
+
+
+def test_preferences_permissions_csrf_and_restricted_subscription(notifying):
+    from test_api_tokens import bearer, issue
+    factory, client, people, project = notifying
+    admin, member = client("administrator"), client("member")
+    item = create(admin, project)
+    path = f"/api/v1/items/{item}/notifications"
+    assert client().get(path).status_code == 401
+    assert client("outsider").put(path, json={"enabled": True}).status_code == 404
+    member.headers.pop("X-CSRF-Token")
+    assert member.put(path, json={"enabled": True}).status_code == 403
+    token = bearer(issue(admin, ["read", "write"])["token"])
+    assert token.get(path).status_code == 403
+    assert member.get(path).status_code == 200
+    assert admin.put(f"/api/v1/projects/{project}", json={"name": "Notifications", "description": "",
+                     "visibility": "private", "restrict_ticket_visibility": True}).status_code == 200
+    assert member.get(path).status_code == 404
+    member.headers["X-CSRF-Token"] = "test-csrf"
+    assert member.put(path, json={"enabled": True}).status_code == 404
+
+
+def test_bot_updates_follow_subscription_rules_and_localized_footer(notifying, monkeypatch):
+    from test_api_tokens import bearer, bot, issue
+    factory, client, people, project = notifying
+    admin, reader = client("administrator"), client("reader")
+    item = create(admin, project)
+    queued(factory, clear=True)
+    reader.put(f"/api/v1/items/{item}/notifications", json={"enabled": True})
+    account = bot(admin)
+    admin.put(f'/api/v1/bots/{account["id"]}/projects/{project}', json={"role": "reporter"})
+    api = bearer(issue(admin, ["write"], f'/api/v1/bots/{account["id"]}/tokens')["token"])
+    assert api.patch(f"/api/v1/items/{item}", json={"status": "Done"}).status_code == 200
+    assert queued(factory) == {people["administrator"], people["reader"]}
+    with factory() as db:
+        db.get(User, people["reader"]).language = "cs"
+        db.commit()
+    sent = []
+    monkeypatch.setattr(mail, "send_message", sent.append)
+    notifications.deliver_notifications()
+    for message in sent:
+        plain = message.get_body(preferencelist=("plain",)).get_content()
+        html = message.get_body(preferencelist=("html",)).get_content()
+        assert "Automation bot" in plain
+        assert f"{settings.app_base_url}/NT/1#notifications" in plain and "#project-notifications" in html
+        assert ("Tento e-mail byl odeslán" if message["Content-Language"] == "cs" else "This email was sent") in plain
+        assert ("Spravovat notifikace" if message["Content-Language"] == "cs" else "Manage ticket notifications") in html

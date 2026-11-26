@@ -10,6 +10,7 @@ import ItemDetail from './components/ItemDetail.vue'
 import ProjectSettings from './components/ProjectSettings.vue'
 import NewItem from './components/NewItem.vue'
 import WorkspaceSidebar from './components/WorkspaceSidebar.vue'
+import NotificationSettings from './components/NotificationSettings.vue'
 import { defaultStatuses, isDefaultStatusFilter, readFilterValues, statusFilterQuery } from './itemFilters'
 import { dateOnly, itemCount, t } from './i18n'
 import { ticketRevision, useLiveTickets } from './realtime'
@@ -186,6 +187,7 @@ function itemCreated(item: WorkItem) {
         <div class="breadcrumbs">{{ t('Organization') }} <span>/</span> {{ project?.name || t('Projects') }}</div>
         <header class="page-heading"><div><span class="eyebrow">{{ project?.key || t('YOUR WORKSPACE') }}</span><h1>{{ t('Work items') }} <span v-if="project" class="count">{{ total }}</span></h1><p>{{ project?.description || t('Track ideas, move work forward, and keep everyone in the loop.') }}</p></div><div class="heading-actions"><PButton v-if="project?.can_manage" severity="secondary" outlined @click="showSettings = true">{{ t('⚙ Settings') }}</PButton><PButton v-if="project?.can_write" @click="newItem">{{ t('＋ New work item') }}</PButton><PButton v-else-if="!projects.length && auth.user?.role === 'administrator'" @click="showProject = true">{{ t('＋ Create project') }}</PButton></div></header>
         <template v-if="project">
+          <NotificationSettings :key="project.id" :project-id="project.id" />
           <div class="work-item-toolbar">
             <WorkItemFilters v-model:query="q" :filters="filters" :labels="labels" :assignees="assignees" @change="changeFilter" @search="filter()" />
             <div class="work-item-sort">

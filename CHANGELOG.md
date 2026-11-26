@@ -4,6 +4,8 @@
 
 ### Added
 
+- Personal project notification toggles and inheritable ticket overrides, including explicit ticket subscriptions and participant display for Read-only members, backed by migration `0017` and delivery-time preference checks. Current assignment and direct mentions bypass muting without bypassing access checks.
+- Localized plain-text and HTML email footers identifying the sending server and project, explaining mute exceptions, and linking to authenticated project and ticket notification controls.
 - Permission-filtered live ticket updates over browser-session WebSockets, backed by transactional PostgreSQL notifications, with automatic reconnection and WebSocket proxy support in development and production.
 - Optional optimistic concurrency checks for ticket edits, preserving drafts and rejecting stale updates with conflict feedback in English and Czech.
 - Ticket attachment removal for users with write access, including permission-checked API deletion, English/Czech controls, activity history, and email notifications. Historical content remains editable after a linked attachment is removed.
@@ -63,8 +65,9 @@
 
 ### Verification
 
-- Backend: 198 tests passed.
-- Frontend: 22 tests passed; TypeScript checks and production build passed.
+- Backend: 213 tests passed.
+- Frontend: 23 tests passed; TypeScript checks and production build passed.
+- Notification preferences: PostgreSQL migration `0017` and model alignment verified; shared-browser real OIDC checks covered account isolation, Read-only subscriptions, inheritance/reset, participant display, English/Czech desktop/mobile controls, actual SMTP mute exceptions, and email management links.
 - PostgreSQL migration and model alignment verified without changing existing user counts.
 - Shared-browser verification covered desktop/mobile layouts, real OIDC sign-in, authorization boundaries, filters, project settings, forms, and application user administration.
 - Shared-browser verification also covered local password invitation/recovery, account language persistence, Czech ticket flows, and actual ticket notification SMTP delivery to Mailpit for creation, mentions, comments, reassignment, and status changes.

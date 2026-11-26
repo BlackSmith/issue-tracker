@@ -377,7 +377,17 @@ restart the API after changing configuration.
   as well as the author, assignee, and users mentioned in the description.
 - Ticket changes notify the author, current assignee, discussion/activity participants,
   and users mentioned in the description or existing comments. Reassignment also
-  notifies the previous assignee. Participants are comment and activity authors.
+  notifies the previous assignee. Explicit ticket subscribers receive all changes
+  and appear among participants without needing to comment.
+- Each human member, including Read-only users, can mute their own project notifications.
+  Tickets inherit that setting unless explicitly enabled or disabled. Enabling a ticket
+  subscribes the user to all its changes, overriding a muted project; use **Use project
+  setting** to restore inheritance. Enabling a project retains the usual recipient rules
+  rather than subscribing to every ticket.
+- Current assignment and stable mentions in the description or existing comments bypass
+  muting. Authorship, previous assignment, participation, and Owner status do not. Preferences
+  are checked both when enqueueing and immediately before delivery, including queued emails.
+  Access checks always apply, and bot-authored changes follow the same notification rules.
 - Changes include metadata/title/description edits, comments, checklist toggles, and
   permanent attachment uploads. Draft uploads, failed writes, and no-op saves do not
   send notifications. Editor attachments are covered by the subsequent content save.
@@ -392,7 +402,10 @@ restart the API after changing configuration.
 Emails contain the ticket reference/title, actor, change summary, and canonical link.
 Comment notifications link to the discussion without copying the comment body.
 Each email includes both plain-text and HTML alternatives, with clickable ticket
-links in the HTML version. Subjects, interface labels, and generated change summaries
+links in the HTML version. The footer identifies the sending server and project membership,
+explains mute exceptions, and links to the user's project and ticket notification controls.
+Opening these links does not change settings; changes require a signed-in browser session.
+Subjects, interface labels, and generated change summaries
 use the recipient's saved account language (English or Czech), which is restored on
 sign-in. The language is read at delivery time, so subsequent saved preference changes
 also apply to queued messages. User-authored titles, names, filenames, and labels are

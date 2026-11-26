@@ -30,6 +30,7 @@ from app.providers import OIDCProvider, FacebookProvider
 from app.passwords import router as passwords_router, establish_session, auth_details
 from app.mail import mail_loop
 from app.notifications import enqueue_notification
+from app.notification_preferences import router as notification_preferences_router
 from app.realtime import router as realtime_router, listen as listen_tickets
 from app.permissions import can_view_item, effective_project_role, visible_item, visible_project
 from app.profiles import avatar_url, profile_json, router as profile_router
@@ -74,6 +75,7 @@ app.include_router(tokens_router)
 app.include_router(bots_router)
 app.include_router(passwords_router)
 app.include_router(realtime_router)
+app.include_router(notification_preferences_router)
 api = "/api/v1"
 
 

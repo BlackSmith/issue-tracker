@@ -9,6 +9,7 @@ import Markdown from '../Markdown.vue'
 import UserAvatar from './UserAvatar.vue'
 import ItemField from './ItemField.vue'
 import StatusBadge from './StatusBadge.vue'
+import NotificationSettings from './NotificationSettings.vue'
 import { dateOnly, dateTime, t } from '../i18n'
 import { activityText } from '../activity'
 import { ticketRevision } from '../realtime'
@@ -63,7 +64,6 @@ const assigneeOptions = computed(() => {
   }
   return options
 })
-const participants = computed(() => [...new Map(discussion.value.map(entry => [entry.author, entry])).values()])
 const expandedActivityGroups = ref(new Set<string>())
 const discussionGroups = computed(() => {
   const groups: { id: string; activity: boolean; entries: Discussion[] }[] = []
@@ -249,7 +249,7 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
           <section><ItemField :label="t('Due date')" kind="date" :value="item.due_date || ''" :can-write="canWrite" :disabled="busy || checklistBusy" :save="saveField('due_date')" @editing="error = ''"><span>{{ item.due_date ? dateOnly(item.due_date) : t('Not set') }}</span></ItemField></section>
           <section><ItemField :label="t('Labels')" kind="labels" :value="JSON.stringify(item.labels)" :label-definitions="labels" :can-write="canWrite" :disabled="busy || checklistBusy || !labelsReady" :save="saveField('labels')" @editing="error = ''"><div v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></div><span v-else class="muted">{{ t('None') }}</span></ItemField></section>
           <section><ItemField :label="t('Assignee')" kind="select" :value="item.assignee_id || ''" :options="assigneeOptions" :can-write="canWrite" :disabled="busy || checklistBusy || !assigneesReady" :save="saveField('assignee_id')" @editing="error = ''"><span v-if="item.assignee" class="assignee-value"><UserAvatar :name="item.assignee.name" :src="item.assignee.avatar_url" /><span>{{ item.assignee.name }} <span v-if="item.assignee.is_bot" class="bot-badge">{{ t('Bot') }}</span></span></span><span v-else class="muted">{{ t('Unassigned') }}</span></ItemField></section>
-          <section><h3>{{ t('Participants') }} <span class="count">{{ participants.length }}</span></h3><div v-if="participants.length" class="detail-participants"><span v-for="participant in participants" :key="participant.author" :title="participant.author"><UserAvatar :name="participant.author" :src="participant.avatar_url" /></span></div><span v-else class="muted">{{ t('None') }}</span></section>
+          <NotificationSettings :item-id="itemId" />
         </aside>
       </div>
     </div>

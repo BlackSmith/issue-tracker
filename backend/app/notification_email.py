@@ -62,7 +62,24 @@ def summary_text(message, language):
     return t("updated {changes}", changes=", ".join(changes))
 
 
+def notification_footer(payload, language):
+    footer = payload.get("footer")
+    if not footer:
+        return "", ""
+    reason = translate("This email was sent from {server} because you are a member of project {project} and a recipient of this ticket's notifications.", language, **{key: footer[key] for key in ("server", "project")})
+    exception = translate("Assignment and direct mentions may still notify you when notifications are disabled.", language)
+    ticket = translate("Manage ticket notifications", language)
+    project = translate("Manage project notifications", language)
+    plain = f'\n{reason}\n{ticket}: {footer["ticket_url"]}\n{project}: {footer["project_url"]}\n{exception}\n'
+    html = (f'<hr><footer style="font-size:12px;color:#555"><p>{escape(reason)}</p>'
+            f'<p><a href="{escape(footer["ticket_url"], quote=True)}">{escape(ticket)}</a> · '
+            f'<a href="{escape(footer["project_url"], quote=True)}">{escape(project)}</a></p>'
+            f'<p>{escape(exception)}</p></footer>')
+    return plain, html
+
+
 def render_notification(payload, language):
+    footer_plain, footer_html = notification_footer(payload, language if "reference" in payload else "en")
     if "reference" not in payload:
         # Queued messages from before structured snapshots still need delivery.
         body = payload["body"]
@@ -71,7 +88,7 @@ def render_notification(payload, language):
         if link:
             url = escape(link[1], quote=True)
             html += f'<p><a href="{url}">Open ticket</a></p>'
-        return payload["subject"], body, html, "en"
+        return payload["subject"], body + footer_plain, html + footer_html, "en"
 
     language = "cs" if language == "cs" else "en"
     heading = translate("New ticket" if payload["created"] else "Ticket updated", language)
@@ -93,4 +110,4 @@ def render_notification(payload, language):
             f'color:#ffffff;text-decoration:none;border-radius:4px">{escape(open_label)}</a></p>'
             f'<p style="font-size:12px"><a href="{url}">{escape(payload["url"])}</a></p>'
             '</body></html>')
-    return subject, body, html, language
+    return subject, body + footer_plain, html.replace('</body>', footer_html + '</body>'), language

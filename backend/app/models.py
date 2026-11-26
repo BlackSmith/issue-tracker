@@ -87,6 +87,20 @@ class TicketNotification(Base):
     delivery_status: Mapped[str] = mapped_column(String(20), default="queued", index=True)
 
 
+class ProjectNotificationPreference(Base):
+    __tablename__ = "project_notification_preferences"
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(default=True)
+
+
+class TicketNotificationPreference(Base):
+    __tablename__ = "ticket_notification_preferences"
+    item_id: Mapped[str] = mapped_column(ForeignKey("work_items.id"), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column()
+
+
 class ApiToken(Base):
     __tablename__ = "api_tokens"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
