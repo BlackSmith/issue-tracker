@@ -146,13 +146,21 @@ class ItemUpdate(ItemCreate):
     status: Status | None = None
     priority: Priority | None = None
     labels: list[str] | None = Field(default=None, max_length=20)
+    expected: dict[str, str | list[str] | None] | None = Field(default=None,
+        description="Optional previous field values for optimistic concurrency checks.")
 
     @model_validator(mode="before")
     @classmethod
     def nonnullable_fields(cls, values):
-        if isinstance(values, dict) and any(value is None and key not in {"due_date", "assignee_id"} for key, value in values.items()):
+        if isinstance(values, dict) and any(value is None and key not in {"due_date", "assignee_id", "expected"} for key, value in values.items()):
             raise ValueError("Only due_date and assignee_id can be null")
         return values
+
+    @model_validator(mode="after")
+    def expected_fields(self):
+        if self.expected is not None and not set(self.expected) <= (self.model_fields_set - {"expected"}):
+            raise ValueError("Expected values must refer to fields being updated")
+        return self
 
 
 class TicketPublication(BaseModel):

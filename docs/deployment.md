@@ -27,6 +27,16 @@ The frontend uses relative `/api/v1` requests. There are no frontend build-time
 environment variables; the same images can be used with different public hostnames.
 Do not run the frontend target alone without an API reachable as `api`.
 
+Ticket lists and details use `/api/v1/tickets/live?project=<uuid>` for live updates.
+The included Nginx configuration forwards WebSocket upgrades; any outer reverse
+proxy must also forward them and permit idle connections longer than the 15-second
+heartbeat. The endpoint requires a valid browser session and an Origin matching
+`APP_BASE_URL` or `API_BASE_URL`; API tokens continue to use REST for writes.
+Each API process holds one dedicated PostgreSQL `LISTEN` connection in addition to
+its normal SQLAlchemy pool. Use a direct or session-pooled database connection for
+this listener, not transaction-pooling middleware. Events are delivered after commit;
+reconnections refresh the current view rather than replaying an event history.
+
 ## First startup
 
 Use Docker Engine with the Docker Compose v2 plugin. Run commands from the repository root.

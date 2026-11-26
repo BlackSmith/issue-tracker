@@ -5,6 +5,6 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     allowedHosts: ['host.docker.internal', 'backend'],
-    proxy: { '/api': 'http://127.0.0.1:5300' },
+    proxy: { '/api': { target: 'http://127.0.0.1:5300', ws: true } },
   },
 })

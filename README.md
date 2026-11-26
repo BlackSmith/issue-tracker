@@ -71,6 +71,10 @@ Connect through your organization's identity provider or an administrator-manage
   priorities, labels, due dates, editing, and activity history.
 - Metadata activity records previous and new values, including assignee names,
   first-time values, and explicit clearing of dates, labels, and assignees.
+- Live ticket lists and details over a session-authenticated WebSocket, including
+  comments, checklists, attachments, and changes made by API bots. Updates preserve
+  filters and drafts; conflicting field edits are rejected instead of silently
+  overwriting newer values. Connections reconnect and refresh after interruptions.
 - Explicit organization and project label definitions with names, colors, and
   descriptions; projects automatically inherit all organization labels. Ticket
   creation, editing, and filtering use existing definitions.

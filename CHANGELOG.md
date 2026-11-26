@@ -4,6 +4,8 @@
 
 ### Added
 
+- Permission-filtered live ticket updates over browser-session WebSockets, backed by transactional PostgreSQL notifications, with automatic reconnection and WebSocket proxy support in development and production.
+- Optional optimistic concurrency checks for ticket edits, preserving drafts and rejecting stale updates with conflict feedback in English and Czech.
 - Ticket attachment removal for users with write access, including permission-checked API deletion, English/Czech controls, activity history, and email notifications. Historical content remains editable after a linked attachment is removed.
 - GitHub Actions builds for API and frontend Docker images, publishing `devel` on pushes to `master` and version tags on Git tag pushes to GHCR, with build-only validation for pull requests.
 - English application screenshots and a README showcase covering the project workspace, ticket details, visual editing, and sign-in.
@@ -27,6 +29,7 @@
 
 ### Changed
 
+- Consecutive ticket activity entries can be collapsed into expandable groups while comments remain visible.
 - Default interface language follows the browser's preferred supported language, including regional variants, while saved browser and account preferences retain precedence.
 - Replace the placeholder brand mark with a ticket-and-check SVG logo and favicon, and redesign sign-in with a responsive split layout, English/Czech copy, and accessible text contrast.
 - Project settings initially focuses the project name instead of the close button, avoiding the automatic circle around X while preserving keyboard focus indicators.

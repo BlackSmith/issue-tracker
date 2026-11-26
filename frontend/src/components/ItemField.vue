@@ -11,15 +11,18 @@ const props = withDefaults(defineProps<{
   kind?: 'text' | 'select' | 'status' | 'date' | 'labels' | 'description'
   options?: readonly (string | { value: string; label: string; disabled?: boolean })[]; itemId?: string; projectId?: string
   labelDefinitions?: LabelDefinition[]
-  save: (value: string) => Promise<boolean>
+  save: (value: string, original: string) => Promise<boolean>
 }>(), { kind: 'text' })
 const emit = defineEmits<{ editing: [value: boolean]; uploaded: [] }>()
 const editing = ref(false), draft = ref(''), uploading = ref(false)
+const original = ref('')
+const conflict = computed(() => editing.value && props.value !== original.value)
 const labelDraft = computed<string[]>({ get: () => JSON.parse(draft.value || '[]'), set: value => { draft.value = JSON.stringify(value) } })
 const form = ref<HTMLFormElement | null>(null)
 const selectOptions = computed(() => props.options?.map(option => typeof option === 'string' ? { value: option, label: t(option), disabled: false } : option))
 async function edit() {
   draft.value = props.value
+  original.value = props.value
   editing.value = true
   emit('editing', true)
   await nextTick()
@@ -31,8 +34,8 @@ function cancel() {
   emit('editing', false)
 }
 async function submit() {
-  if (props.disabled || uploading.value) return
-  if (await props.save(draft.value)) {
+  if (props.disabled || uploading.value || conflict.value) return
+  if (await props.save(draft.value, original.value)) {
     editing.value = false
     emit('editing', false)
   }
@@ -46,6 +49,7 @@ async function submit() {
       <PButton v-if="canWrite && !editing" class="quiet item-field-edit" :disabled="disabled" :aria-label="t('Edit {label}', { label })" @click="edit">{{ t('Edit') }}</PButton>
     </div>
     <form v-if="editing" ref="form" class="item-field-form" :aria-label="t('Edit {label}', { label })" @submit.prevent="submit" @keydown.esc.stop.prevent="cancel">
+      <p v-if="conflict" class="hint" role="status">{{ t('This content has changed. Cancel your edit and try again.') }}</p>
       <LabelPicker v-if="kind === 'labels'" v-model="labelDraft" :definitions="labelDefinitions || []" :disabled="disabled" :show-label="false" />
       <label v-else-if="kind !== 'description'">
         <span class="sr-only">{{ label }}</span>
@@ -56,7 +60,7 @@ async function submit() {
         <InputText v-else v-model="draft" :type="kind === 'date' ? 'date' : 'text'" :required="kind === 'text'" :maxlength="kind === 'text' ? 250 : undefined" :disabled="disabled" />
       </label>
       <RichTextEditor v-else v-model="draft" :label="label" :item-id="itemId" :project-id="projectId" :disabled="disabled" @uploading="uploading = $event" @uploaded="emit('uploaded')" />
-      <div class="item-field-actions"><PButton type="button" severity="secondary" outlined :disabled="disabled || uploading" @click="cancel">{{ t('Cancel') }}</PButton><PButton type="submit" :disabled="disabled || uploading">{{ t('Save') }}</PButton></div>
+      <div class="item-field-actions"><PButton type="button" severity="secondary" outlined :disabled="disabled || uploading" @click="cancel">{{ t('Cancel') }}</PButton><PButton type="submit" :disabled="disabled || uploading || conflict">{{ t('Save') }}</PButton></div>
     </form>
     <slot v-else />
   </div>

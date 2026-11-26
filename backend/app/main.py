@@ -30,6 +30,7 @@ from app.providers import OIDCProvider, FacebookProvider
 from app.passwords import router as passwords_router, establish_session, auth_details
 from app.mail import mail_loop
 from app.notifications import enqueue_notification
+from app.realtime import router as realtime_router, listen as listen_tickets
 from app.permissions import can_view_item, effective_project_role, visible_item, visible_project
 from app.profiles import avatar_url, profile_json, router as profile_router
 from app.references import router as references_router
@@ -49,15 +50,19 @@ async def lifespan(app):
                            for p in settings.configured_providers()}
     cleanup = asyncio.create_task(cleanup_loop())
     mail = asyncio.create_task(mail_loop())
+    tickets = asyncio.create_task(listen_tickets())
     try:
         yield
     finally:
         cleanup.cancel()
         mail.cancel()
+        tickets.cancel()
         with suppress(asyncio.CancelledError):
             await cleanup
         with suppress(asyncio.CancelledError):
             await mail
+        with suppress(asyncio.CancelledError):
+            await tickets
 
 
 app = FastAPI(title="Issue Tracker API", version="0.1.0", lifespan=lifespan,
@@ -68,6 +73,7 @@ app.include_router(references_router)
 app.include_router(tokens_router)
 app.include_router(bots_router)
 app.include_router(passwords_router)
+app.include_router(realtime_router)
 api = "/api/v1"
 
 
@@ -567,12 +573,19 @@ def metadata_change(field, previous, current):
 
 
 def update_item(item_id, values, user, db):
+    expected = values.pop("expected", None)
     item, project = item_access(db, item_id, user, True)
     if "labels" in values:
         lock_catalog(db)
         validate_labels(db, project.id, values["labels"])
     item = db.scalar(select(WorkItem).where(WorkItem.id == item_id).with_for_update()
                      .execution_options(populate_existing=True))
+    for field, previous in (expected or {}).items():
+        current = getattr(item, field)
+        if field == "due_date" and current is not None:
+            current = current.isoformat()
+        if current != previous:
+            raise HTTPException(409, "This content has changed. Cancel your edit and try again.")
     if "description" in values:
         confirm_attachments(db, values["description"], item, user, previous_text=item.description)
     changed = []

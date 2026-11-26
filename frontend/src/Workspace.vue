@@ -12,6 +12,7 @@ import NewItem from './components/NewItem.vue'
 import WorkspaceSidebar from './components/WorkspaceSidebar.vue'
 import { defaultStatuses, isDefaultStatusFilter, readFilterValues, statusFilterQuery } from './itemFilters'
 import { dateOnly, itemCount, t } from './i18n'
+import { ticketRevision, useLiveTickets } from './realtime'
 
 const route = useRoute(), router = useRouter()
 const projects = ref<Project[]>([]), items = ref<WorkItem[]>([]), total = ref(0)
@@ -42,10 +43,13 @@ const filters = computed<Filters>(() => ({ status: status.value, label: label.va
 const hasFilters = computed(() => !!q.value || !isDefaultStatusFilter(status.value) || label.value.length > 0 || priority.value.length > 0 || type.value.length > 0 || assignee.value.length > 0)
 const page = computed(() => Number(route.query.page) || 1)
 let sequence = 0
+useLiveTickets(projectId)
+watch(ticketRevision, () => load(true))
 
-async function load() {
+async function load(background = false) {
   const current = ++sequence
-  loading.value = true; error.value = ''
+  if (!background) loading.value = true
+  error.value = ''
   try {
     projects.value = await api<Project[]>('/projects')
     if (current !== sequence) return
@@ -105,10 +109,17 @@ async function load() {
       if (current !== sequence) return
       items.value = result.items; total.value = result.total
     }
-  } catch (e) { if (current === sequence) error.value = (e as Error).message }
+  } catch (e) {
+    if (current === sequence) {
+      error.value = (e as Error).message
+      if ((e as { status?: number }).status === 404 || (e as { status?: number }).status === 401) {
+        resolvedItem.value = null; resolvedPath.value = ''; items.value = []; total.value = 0
+      }
+    }
+  }
   finally { if (current === sequence) loading.value = false }
 }
-onMounted(load)
+onMounted(() => load())
 watch(() => route.fullPath, () => {
   showProject.value = false
   showSettings.value = false
@@ -191,7 +202,7 @@ function itemCreated(item: WorkItem) {
         <div v-else-if="!loading" class="empty-state"><span class="empty-icon">▦</span><h2>{{ t(hasProjectRoute ? 'Project not found' : 'Welcome to your workspace') }}</h2><p>{{ t(hasProjectRoute ? 'This project does not exist or you do not have access to it.' : auth.user?.role === 'administrator' ? 'A project brings your team’s work together. Create one to get started.' : 'Ask an application admin or project owner to grant you access to a project.') }}</p></div>
       </template>
       <div v-if="ticketRoute && !itemId && loading" class="empty-state">{{ t('Loading work item…') }}</div>
-      <ItemDetail v-if="itemId" :key="itemId" :item-id="itemId" :can-write="project?.can_write || false" :can-manage="project?.can_manage || false" :restrict-ticket-visibility="project?.restrict_ticket_visibility || false" :standalone="standalone" @close="closeItem" @updated="load" />
+      <ItemDetail v-if="itemId" :key="itemId" :item-id="itemId" :can-write="project?.can_write || false" :can-manage="project?.can_manage || false" :restrict-ticket-visibility="project?.restrict_ticket_visibility || false" :standalone="standalone" @close="closeItem" @updated="load(true)" />
       <NewItem v-if="creatingItem && project" :key="project.id" :project="project" :standalone="standalone" @close="closeItem" @toggle-view="setCreationView" @created="itemCreated" />
       <div v-else-if="creatingItem && standalone" class="empty-state"><h2>{{ t(loading ? 'Loading project…' : 'Project not found') }}</h2><p v-if="!loading">{{ t('This project does not exist or you do not have access to it.') }}</p></div>
     </main>
