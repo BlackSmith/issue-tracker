@@ -4,6 +4,7 @@
 
 ### Added
 
+- Ticket lists show the author, assignee or unassigned state, and localized date and time of the last update. Work item API responses include the author's ID and display name.
 - Owner-managed project logos in General settings, with permission-checked reads, normalized padded PNG storage, migration `0018`, and nonshrinking square sidebar logos or fallback initials.
 - Compact project subscription controls and per-ticket notification bells in work item lists, with live synchronization of inherited preferences across browser tabs.
 - Personal project notification toggles and inheritable ticket overrides, including explicit ticket subscriptions and participant display for Read-only members, backed by migration `0017` and delivery-time preference checks. Current assignment and direct mentions bypass muting without bypassing access checks.
@@ -33,6 +34,7 @@
 
 ### Changed
 
+- Ticket sorting uses a single outlined control beside the result count, keeping the sort field and direction together when a ticket opens in the side panel. Search and project settings use aligned SVG icons, and the ticket Edit button matches the notification button's outlined style.
 - Ticket authors and users mentioned in saved descriptions or comments default to receiving ticket updates independently of project subscriptions. Comment and activity participants continue to inherit the project preference.
 - Project and ticket notification bells appear in their respective headers. Ticket list and detail controls synchronize immediately after a preference change, and ticket overrides can be reset to the computed default.
 - Ticket attachment lists start collapsed and can be expanded with an accessible count toggle, preserving expansion during live updates.
@@ -61,6 +63,7 @@
 
 ### Fixed
 
+- Closing the project settings dialog returns keyboard focus to its opening button.
 - Opening another password setup link in the same browser document refreshes the setup form and discards the previous token and draft.
 - Password resets, login-email changes, and account disabling revoke browser sessions through account authentication versions while preserving independent API token lifecycles.
 - Expired browser sessions now return the interface to sign-in instead of leaving a stale user and failing Sign out with Invalid CSRF token. Authentication failures synchronize through a shared session refresh; logout refreshes CSRF first, and failed writes are never automatically replayed.
@@ -71,8 +74,9 @@
 
 ### Verification
 
-- Backend: 220 tests passed.
+- Backend: 221 tests passed.
 - Frontend: 23 tests passed; TypeScript checks and production build passed.
+- Shared-browser OIDC checks covered ticket metadata in English and Czech, sorting with the detail panel open, settings focus restoration, and the outlined Edit button on desktop and mobile.
 - Notification preferences: PostgreSQL migration `0017` and model alignment verified; shared-browser real OIDC checks covered account isolation, Read-only subscriptions, inheritance/reset, participant display, English/Czech desktop/mobile controls, actual SMTP mute exceptions, and email management links.
 - Project logos: PostgreSQL migration `0018` and model alignment verified; real OIDC browser checks covered Owner/admin upload, replacement/removal, validation, current-access enforcement, preserved settings drafts, and square logo/initial rendering at 1440px, 800px, and 390px in English and Czech.
 - Shared-browser checks confirmed collapsed attachments, live count/expansion preservation, list notification bells, cross-tab inheritance updates, and actual SMTP new-ticket-only project broadcasts with restricted-project exclusions.

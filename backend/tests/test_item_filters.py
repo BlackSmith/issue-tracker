@@ -1,4 +1,24 @@
+from datetime import datetime
+
 from test_access import project
+
+
+def test_list_reports_author_assignee_and_last_change(env):
+    _, client, people = env
+    admin, member, reader = client('administrator'), client('member'), client('reader')
+    path = f'/api/v1/projects/{project(admin)}/items'
+    created = member.post(path, json={'title': 'Ticket metadata', 'assignee_id': people['administrator']})
+    assert created.status_code == 201, created.text
+
+    item = reader.get(path).json()['items'][0]
+    assert item['author'] == {'id': people['member'], 'name': 'member'}
+    assert item['assignee']['name'] == 'administrator'
+    assert admin.patch(f'/api/v1/items/{item["id"]}', json={'assignee_id': None}).status_code == 200
+
+    updated = reader.get(path).json()['items'][0]
+    assert updated['author'] == item['author']
+    assert updated['assignee'] is None
+    assert datetime.fromisoformat(updated['updated_at']) > datetime.fromisoformat(item['updated_at'])
 
 
 def test_multiple_statuses_search_counts_and_pagination(env):

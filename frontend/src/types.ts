@@ -11,6 +11,7 @@ export interface WorkItem {
   id: string; project_id: string; project_slug: string; number: number; web_url: string
   reference: string; title: string; description: string; description_version: string
   type: string; status: string; priority: string; labels: string[]; due_date: string | null
+  author: { id: string; name: string }
   assignee_id: string | null; assignee: Assignee | null
   is_project_public: boolean
   created_at: string; updated_at: string

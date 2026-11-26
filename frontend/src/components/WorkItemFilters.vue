@@ -81,7 +81,10 @@ function onFocusOut(event: FocusEvent) {
 <template>
   <div ref="root" class="work-item-search" @focusout="onFocusOut">
     <div class="token-search" @click.self="focus">
-      <span class="search-symbol" aria-hidden="true">⌕</span>
+      <svg class="search-symbol" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+        <circle cx="10.5" cy="10.5" r="6.5" />
+        <path d="m15 15 5 5" />
+      </svg>
       <template v-for="category in fields" :key="category.key">
         <span v-for="value in filters[category.key]" :key="value" class="filter-token">
           <button type="button" class="token-value" :aria-label="t('Edit {name} filter: {value}', { name: category.name, value: valueName(category.key, value) })" @click="edit(category.key)">
@@ -130,7 +133,7 @@ function onFocusOut(event: FocusEvent) {
   .work-item-search { flex: 1; min-width: 0; position: relative; }
   .token-search { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 8px; min-height: 44px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
   .token-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-  .search-symbol { color: var(--muted); font-size: 22px; line-height: 1; }
+  .search-symbol { flex: none; color: var(--muted); pointer-events: none; }
   .token-search .p-inputtext { flex: 1; width: 160px; min-width: 140px; padding: 4px; border: none; box-shadow: none; outline: none; background: transparent; font-size: 13px; }
   .filter-token { display: inline-flex; max-width: 100%; align-items: stretch; border: 1px solid var(--border); border-radius: 4px; background: var(--subtle); overflow: hidden; font-size: 12px; }
   .token-value, .token-remove { min-height: 28px; padding: 3px 6px; border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: 12px; }

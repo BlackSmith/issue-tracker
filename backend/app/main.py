@@ -18,7 +18,7 @@ from starlette.responses import JSONResponse
 from pydantic import Field
 from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
 from app.attachments import cleanup_loop, confirm_attachments
@@ -161,6 +161,7 @@ def item_json(item, project):
             "number": item.number, "web_url": f"/{project.key}/{item.number}", "reference": f"{project.key}-{item.number}",
              "description_version": content_version(item.description),
             "is_project_public": item.is_project_public,
+            "author": {"id": item.author_id, "name": item.author.name},
             "assignee_id": item.assignee_id, "assignee": assignee_json(item.assignee) if item.assignee else None,
              **{key: getattr(item, key) for key in ("title", "description", "type", "status", "priority", "labels", "due_date", "created_at", "updated_at")}}
 
@@ -515,7 +516,8 @@ def items(project_id: str, q: str = Query("", max_length=200), status: list[Stat
               "due_date": WorkItem.due_date}[sort]
     direction = direction or ("asc" if sort in {"title", "due_date"} else "desc")
     order = (column.asc() if direction == "asc" else column.desc()).nulls_last()
-    rows = db.scalars(query.order_by(order, WorkItem.id).offset((page - 1) * per_page).limit(per_page))
+    rows = db.scalars(query.options(selectinload(WorkItem.author).load_only(User.name))
+                      .order_by(order, WorkItem.id).offset((page - 1) * per_page).limit(per_page))
     return {"items": [item_json(i, project) for i in rows], "total": total, "page": page, "per_page": per_page}
 
 
