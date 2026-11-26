@@ -4,6 +4,8 @@
 
 ### Added
 
+- Owner-managed project logos in General settings, with permission-checked reads, normalized padded PNG storage, migration `0018`, and nonshrinking square sidebar logos or fallback initials.
+- Compact project subscription controls and per-ticket notification bells in work item lists, with live synchronization of inherited preferences across browser tabs.
 - Personal project notification toggles and inheritable ticket overrides, including explicit ticket subscriptions and participant display for Read-only members, backed by migration `0017` and delivery-time preference checks. Current assignment and direct mentions bypass muting without bypassing access checks.
 - Localized plain-text and HTML email footers identifying the sending server and project, explaining mute exceptions, and linking to authenticated project and ticket notification controls.
 - Permission-filtered live ticket updates over browser-session WebSockets, backed by transactional PostgreSQL notifications, with automatic reconnection and WebSocket proxy support in development and production.
@@ -31,6 +33,8 @@
 
 ### Changed
 
+- Ticket attachment lists start collapsed and can be expanded with an accessible count toggle, preserving expansion during live updates.
+- Project subscriptions default to new-ticket announcements for active human members without subscribing them to later changes. Restricted-visibility projects limit project subscriptions and controls to Owners, enforced at enqueue and delivery; unavailable management links are omitted from nonowner email footers.
 - Consecutive ticket activity entries can be collapsed into expandable groups while comments remain visible.
 - Default interface language follows the browser's preferred supported language, including regional variants, while saved browser and account preferences retain precedence.
 - Replace the placeholder brand mark with a ticket-and-check SVG logo and favicon, and redesign sign-in with a responsive split layout, English/Czech copy, and accessible text contrast.
@@ -65,9 +69,11 @@
 
 ### Verification
 
-- Backend: 213 tests passed.
+- Backend: 219 tests passed.
 - Frontend: 23 tests passed; TypeScript checks and production build passed.
 - Notification preferences: PostgreSQL migration `0017` and model alignment verified; shared-browser real OIDC checks covered account isolation, Read-only subscriptions, inheritance/reset, participant display, English/Czech desktop/mobile controls, actual SMTP mute exceptions, and email management links.
+- Project logos: PostgreSQL migration `0018` and model alignment verified; real OIDC browser checks covered Owner/admin upload, replacement/removal, validation, current-access enforcement, preserved settings drafts, and square logo/initial rendering at 1440px, 800px, and 390px in English and Czech.
+- Shared-browser checks confirmed collapsed attachments, live count/expansion preservation, list notification bells, cross-tab inheritance updates, and actual SMTP new-ticket-only project broadcasts with restricted-project exclusions.
 - PostgreSQL migration and model alignment verified without changing existing user counts.
 - Shared-browser verification covered desktop/mobile layouts, real OIDC sign-in, authorization boundaries, filters, project settings, forms, and application user administration.
 - Shared-browser verification also covered local password invitation/recovery, account language persistence, Czech ticket flows, and actual ticket notification SMTP delivery to Mailpit for creation, mentions, comments, reassignment, and status changes.

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import SessionLocal, engine
-from app.models import Activity, Attachment, BrowserSession, Comment, Label, Project, ProjectMember, User, WorkItem, TicketNotificationPreference
+from app.models import Activity, Attachment, BrowserSession, Comment, Label, Project, ProjectMember, User, WorkItem, TicketNotificationPreference, ProjectNotificationPreference
 from app.permissions import visible_item, visible_project
 from app.security import token_hash
 
@@ -37,7 +37,7 @@ def notify_changes(db, flush_context):
             messages.add(("item", row.item_id))
         elif isinstance(row, Attachment) and not row.pending and row.item_id:
             messages.add(("item", row.item_id))
-        elif isinstance(row, (Project, ProjectMember, Label)):
+        elif isinstance(row, (Project, ProjectMember, Label, ProjectNotificationPreference)):
             messages.add(("project", row.id if isinstance(row, Project) else row.project_id))
         elif isinstance(row, User):
             messages.add(("resync", None))

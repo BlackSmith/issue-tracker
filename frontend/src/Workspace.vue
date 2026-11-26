@@ -187,7 +187,6 @@ function itemCreated(item: WorkItem) {
         <div class="breadcrumbs">{{ t('Organization') }} <span>/</span> {{ project?.name || t('Projects') }}</div>
         <header class="page-heading"><div><span class="eyebrow">{{ project?.key || t('YOUR WORKSPACE') }}</span><h1>{{ t('Work items') }} <span v-if="project" class="count">{{ total }}</span></h1><p>{{ project?.description || t('Track ideas, move work forward, and keep everyone in the loop.') }}</p></div><div class="heading-actions"><PButton v-if="project?.can_manage" severity="secondary" outlined @click="showSettings = true">{{ t('⚙ Settings') }}</PButton><PButton v-if="project?.can_write" @click="newItem">{{ t('＋ New work item') }}</PButton><PButton v-else-if="!projects.length && auth.user?.role === 'administrator'" @click="showProject = true">{{ t('＋ Create project') }}</PButton></div></header>
         <template v-if="project">
-          <NotificationSettings :key="project.id" :project-id="project.id" />
           <div class="work-item-toolbar">
             <WorkItemFilters v-model:query="q" :filters="filters" :labels="labels" :assignees="assignees" @change="changeFilter" @search="filter()" />
             <div class="work-item-sort">
@@ -195,9 +194,9 @@ function itemCreated(item: WorkItem) {
               <PButton type="button" severity="secondary" outlined :aria-label="t(direction === 'asc' ? 'Sort descending' : 'Sort ascending')" :title="t(direction === 'asc' ? 'Ascending · click to reverse' : 'Descending · click to reverse')" @click="direction = direction === 'asc' ? 'desc' : 'asc'; filter()">{{ direction === 'asc' ? '↑' : '↓' }}</PButton>
             </div>
           </div>
-          <div class="list-caption"><span>{{ itemCount(total) }}</span><PButton v-if="hasFilters" class="quiet" @click="resetFilters">{{ t('Reset filters') }}</PButton></div>
+          <div class="list-caption"><span>{{ itemCount(total) }}</span><NotificationSettings v-if="!project.restrict_ticket_visibility || project.can_manage" :key="project.id" :project-id="project.id" compact /><PButton v-if="hasFilters" class="quiet" @click="resetFilters">{{ t('Reset filters') }}</PButton></div>
           <div v-if="loading" class="empty-state">{{ t('Loading work items…') }}</div>
-          <section v-else-if="items.length" class="item-list" :aria-label="t('Work items')"><RouterLink v-for="item in items" :key="item.id" class="item-row" :to="{ path: item.web_url, query: { ...route.query, view: 'panel' } }"><StatusBadge :status="item.status" icon-only /><span class="item-info"><strong>{{ item.title }}</strong><span class="item-meta">{{ item.reference }} <span>·</span> {{ t(item.type) }} <span>·</span> {{ t(item.status) }} <span v-if="item.due_date">· {{ t('Due') }} {{ dateOnly(item.due_date) }}</span></span><span v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></span></span><span class="priority" :class="item.priority.toLowerCase()">{{ t(item.priority) }}</span><span class="row-arrow">↗</span></RouterLink></section>
+          <section v-else-if="items.length" class="item-list" :aria-label="t('Work items')"><div v-for="item in items" :key="item.id" class="item-list-entry"><RouterLink class="item-row" :to="{ path: item.web_url, query: { ...route.query, view: 'panel' } }"><StatusBadge :status="item.status" icon-only /><span class="item-info"><strong>{{ item.title }}</strong><span class="item-meta">{{ item.reference }} <span>·</span> {{ t(item.type) }} <span>·</span> {{ t(item.status) }} <span v-if="item.due_date">· {{ t('Due') }} {{ dateOnly(item.due_date) }}</span></span><span v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></span></span><span class="priority" :class="item.priority.toLowerCase()">{{ t(item.priority) }}</span><span class="row-arrow">↗</span></RouterLink><NotificationSettings :item-id="item.id" compact icon-only /></div></section>
           <div v-else class="empty-state"><span class="empty-icon">▤</span><h2>{{ t(hasFilters ? 'No matching work items' : 'No active work items') }}</h2><p>{{ t(hasFilters ? 'Try adjusting your filters or search terms.' : 'Done and canceled work items are hidden by default. Change the status filter to see them, or create a new work item.') }}</p><PButton v-if="project.can_write && !hasFilters" @click="newItem">{{ t('Create work item') }}</PButton></div>
           <Paginator v-if="total > 25" :first="(page - 1) * 25" :rows="25" :total-records="total" @page="router.push({ query: { ...route.query, page: $event.page + 1 } })" />
         </template>
@@ -225,6 +224,8 @@ function itemCreated(item: WorkItem) {
 
 <style scoped>
 @layer app {
+  .item-list-entry { display: flex; align-items: center; border-bottom: 1px solid var(--border); padding-right: 12px; }
+  .item-list-entry .item-row { flex: 1; min-width: 0; border-bottom: 0; }
   .work-item-toolbar { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--subtle); }
   .work-item-sort { display: flex; gap: 6px; flex-shrink: 0; }
   .work-item-sort .p-select { width: 160px; min-height: 44px; }

@@ -212,6 +212,15 @@ memberships for previously implicit access. The legacy API `visibility` field is
 retained as metadata for compatibility; neither value grants access without membership.
 The downgrade restores project role names but cannot infer former application readers.
 
+Project Owners can upload or remove a logo in **Project settings → General**.
+PNG, JPEG, GIF, and WebP images up to 5 MB and 16 megapixels are accepted; logos
+are normalized to a 256px PNG with transparent padding to preserve their proportions.
+Logo changes save immediately without saving other draft settings. Project members
+see the logo in the sidebar; projects without one retain their two-letter icon.
+Both variants remain square when the browser narrows. Logo reads require current
+project access, and uploads/removal require Owner access. Migration `0018` stores
+normalized logo bytes in PostgreSQL, alongside the project's other settings.
+
 ### Application settings and users
 
 Application administrators open **Organization settings** at the bottom of the left sidebar. The
@@ -373,8 +382,11 @@ every authentication provider, independently of `password_enabled`. They are dis
 by default; enabling them requires valid mail configuration. Apply migrations and
 restart the API after changing configuration.
 
-- New tickets notify all project Owners, including inherited application administrators,
-  as well as the author, assignee, and users mentioned in the description.
+- New tickets notify all active human project members by default, including inherited
+  members and application administrators, subject to their personal notification settings.
+  In restricted-visibility projects, project-wide subscriptions and their controls are
+  available only to Owners (including application administrators); author, assignee, and
+  mention rules still apply to users who can access the ticket.
 - Ticket changes notify the author, current assignee, discussion/activity participants,
   and users mentioned in the description or existing comments. Reassignment also
   notifies the previous assignee. Explicit ticket subscribers receive all changes
@@ -382,8 +394,10 @@ restart the API after changing configuration.
 - Each human member, including Read-only users, can mute their own project notifications.
   Tickets inherit that setting unless explicitly enabled or disabled. Enabling a ticket
   subscribes the user to all its changes, overriding a muted project; use **Use project
-  setting** to restore inheritance. Enabling a project retains the usual recipient rules
-  rather than subscribing to every ticket.
+  setting** to restore inheritance. Project subscriptions announce newly created tickets
+  only; receiving that announcement does not subscribe a user to subsequent changes.
+  Compact project controls appear on the ticket list, with a notification bell on each
+  ticket row and notification controls in ticket details.
 - Current assignment and stable mentions in the description or existing comments bypass
   muting. Authorship, previous assignment, participation, and Owner status do not. Preferences
   are checked both when enqueueing and immediately before delivery, including queued emails.

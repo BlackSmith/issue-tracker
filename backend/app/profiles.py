@@ -44,13 +44,13 @@ def update_profile(payload: ProfileUpdate, user: User = Depends(current_user), d
     return profile_json(user)
 
 
-async def read_avatar(file: UploadFile) -> bytes:
+async def read_avatar(file: UploadFile, *, crop=True, label="Profile pictures") -> bytes:
     try:
         data = await file.read(MAX_AVATAR_BYTES + 1)
     finally:
         await file.close()
     if len(data) > MAX_AVATAR_BYTES:
-        raise HTTPException(413, "Profile pictures must be smaller than 5 MB")
+        raise HTTPException(413, f"{label} must be smaller than 5 MB")
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
@@ -58,8 +58,10 @@ async def read_avatar(file: UploadFile) -> bytes:
                 if source.format not in {"PNG", "JPEG", "GIF", "WEBP"}:
                     raise HTTPException(422, "Choose a PNG, JPEG, GIF, or WebP picture")
                 if source.width * source.height > MAX_AVATAR_PIXELS:
-                    raise HTTPException(422, "Profile pictures must not exceed 16 megapixels")
-                image = ImageOps.fit(ImageOps.exif_transpose(source).convert("RGBA"), (256, 256))
+                    raise HTTPException(422, f"{label} must not exceed 16 megapixels")
+                normalized = ImageOps.exif_transpose(source).convert("RGBA")
+                image = (ImageOps.fit(normalized, (256, 256)) if crop else
+                         ImageOps.pad(normalized, (256, 256), color=(0, 0, 0, 0)))
                 # Re-encode decoded pixels: discard animation, metadata and any
                 # extra file payload rather than serving the original upload.
                 image.info.clear()

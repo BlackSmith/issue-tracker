@@ -4,7 +4,7 @@ export interface User {
   is_bot: boolean
   language: 'en' | 'cs'
 }
-export interface Project { id: string; key: string; slug: string; legacy_slug?: string | null; name: string; description: string; visibility: string; default_access: 'reporter' | 'read-only' | null; restrict_ticket_visibility: boolean; can_write: boolean; can_manage: boolean }
+export interface Project { id: string; key: string; slug: string; legacy_slug?: string | null; name: string; logo_url: string | null; description: string; visibility: string; default_access: 'reporter' | 'read-only' | null; restrict_ticket_visibility: boolean; can_write: boolean; can_manage: boolean }
 export interface Assignee { id: string; name: string; avatar_url: string | null; is_bot: boolean }
 export interface LabelDefinition { id: string; project_id: string | null; name: string; color: string; description: string }
 export interface WorkItem {

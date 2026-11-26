@@ -70,10 +70,11 @@ def notification_footer(payload, language):
     exception = translate("Assignment and direct mentions may still notify you when notifications are disabled.", language)
     ticket = translate("Manage ticket notifications", language)
     project = translate("Manage project notifications", language)
-    plain = f'\n{reason}\n{ticket}: {footer["ticket_url"]}\n{project}: {footer["project_url"]}\n{exception}\n'
+    project_plain = f'{project}: {footer["project_url"]}\n' if footer.get("project_url") else ""
+    project_html = f' · <a href="{escape(footer["project_url"], quote=True)}">{escape(project)}</a>' if footer.get("project_url") else ""
+    plain = f'\n{reason}\n{ticket}: {footer["ticket_url"]}\n{project_plain}{exception}\n'
     html = (f'<hr><footer style="font-size:12px;color:#555"><p>{escape(reason)}</p>'
-            f'<p><a href="{escape(footer["ticket_url"], quote=True)}">{escape(ticket)}</a> · '
-            f'<a href="{escape(footer["project_url"], quote=True)}">{escape(project)}</a></p>'
+            f'<p><a href="{escape(footer["ticket_url"], quote=True)}">{escape(ticket)}</a>{project_html}</p>'
             f'<p>{escape(exception)}</p></footer>')
     return plain, html
 

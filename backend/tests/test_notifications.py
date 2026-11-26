@@ -139,12 +139,12 @@ def test_delivery_encryption_retry_and_current_contact_address(notifying, monkey
         db.commit()
     monkeypatch.setattr(mail, "send_message", sent.append)
     notifications.deliver_notifications()
-    assert {str(message["To"]) for message in sent} == {"administrator@example.test", "new-contact@example.com"}
+    assert {str(message["To"]) for message in sent} == {"administrator@example.test", "new-contact@example.com", "reader@example.test"}
     assert all("NT-1" in str(message["Subject"]) and "/NT/1" in message.get_body(preferencelist=("plain",)).get_content() for message in sent)
     with factory() as db:
         assert all(row.delivery_status == "sent" and row.encrypted_body is None for row in db.scalars(select(TicketNotification)))
     notifications.deliver_notifications()
-    assert len(sent) == 2
+    assert len(sent) == 3
 
 
 @pytest.mark.parametrize("reason", ["removed", "disabled", "bot", "pending", "empty_email"])
@@ -167,7 +167,7 @@ def test_delivery_rechecks_eligibility(notifying, monkeypatch, reason):
     sent = []
     monkeypatch.setattr(mail, "send_message", sent.append)
     notifications.deliver_notifications()
-    assert [str(message["To"]) for message in sent] == ["administrator@example.test"]
+    assert {str(message["To"]) for message in sent} == {"administrator@example.test", "reader@example.test"}
     with factory() as db:
         row = db.scalar(select(TicketNotification).where(TicketNotification.user_id == people["member"]))
         assert row.delivery_status == "canceled" and row.encrypted_body is None
@@ -305,8 +305,8 @@ def test_preexisting_queued_payload_still_delivers_as_multipart(notifying, monke
     sent = []
     monkeypatch.setattr(mail, "send_message", sent.append)
     notifications.deliver_notifications()
-    assert len(sent) == 1
-    message = sent[0]
+    assert len(sent) == 3
+    message = next(message for message in sent if str(message["Subject"]) == legacy["subject"])
     assert str(message["Subject"]) == legacy["subject"]
     assert message.get_body(preferencelist=("plain",)).get_content().startswith(legacy["body"])
     html = message.get_body(preferencelist=("html",)).get_content()
@@ -407,3 +407,54 @@ def test_bot_updates_follow_subscription_rules_and_localized_footer(notifying, m
         assert f"{settings.app_base_url}/NT/1#notifications" in plain and "#project-notifications" in html
         assert ("Tento e-mail byl odeslán" if message["Content-Language"] == "cs" else "This email was sent") in plain
         assert ("Spravovat notifikace" if message["Content-Language"] == "cs" else "Manage ticket notifications") in html
+
+
+def test_project_subscription_defaults_to_new_tickets_only_and_can_be_muted(notifying):
+    factory, client, people, project = notifying
+    admin, member, reader = client("administrator"), client("member"), client("reader")
+    project_path = f"/api/v1/projects/{project}/notifications"
+    assert member.get(project_path).json() == {"enabled": True}
+    assert reader.get(project_path).json() == {"enabled": True}
+    item = create(admin, project)
+    assert queued(factory, clear=True) == {people[role] for role in ("administrator", "member", "reader")}
+    admin.patch(f"/api/v1/items/{item}", json={"priority": "High"})
+    assert queued(factory, clear=True) == {people["administrator"]}
+    assert member.put(project_path, json={"enabled": False}).status_code == 200
+    create(admin, project)
+    assert queued(factory, clear=True) == {people["administrator"], people["reader"]}
+    assert reader.put(project_path, json={"enabled": False}).status_code == 200
+    create(admin, project, assignee_id=people["member"], description=f'[@user](/users/{people["reader"]})')
+    assert queued(factory) == {people[role] for role in ("administrator", "member", "reader")}
+
+
+def test_restricted_project_subscription_is_owner_only_but_tickets_remain_personal(notifying):
+    factory, client, people, project = notifying
+    admin, member, reader = client("administrator"), client("member"), client("reader")
+    assert admin.put(f"/api/v1/projects/{project}", json={"name": "Notifications", "description": "",
+                     "visibility": "private", "restrict_ticket_visibility": True}).status_code == 200
+    path = f"/api/v1/projects/{project}/notifications"
+    for person in (member, reader):
+        assert person.get(path).status_code == 403
+        assert person.put(path, json={"enabled": True}).status_code == 403
+    assert admin.get(path).status_code == 200
+    item = create(admin, project)
+    assert queued(factory, clear=True) == {people["administrator"]}
+    admin.put(f"/api/v1/items/{item}/publication", json={"is_project_public": True})
+    queued(factory, clear=True)
+    assert reader.put(f"/api/v1/items/{item}/notifications", json={"enabled": True}).status_code == 200
+    admin.patch(f"/api/v1/items/{item}", json={"priority": "High"})
+    assert queued(factory) == {people["administrator"], people["reader"]}
+
+
+def test_queued_project_broadcast_rechecks_restriction_even_for_public_tickets(notifying, monkeypatch):
+    from app.models import Project, WorkItem
+    factory, client, people, project = notifying
+    item = create(client("administrator"), project)
+    with factory() as db:
+        db.get(Project, project).restrict_ticket_visibility = True
+        db.get(WorkItem, item).is_project_public = True
+        db.commit()
+    sent = []
+    monkeypatch.setattr(mail, "send_message", sent.append)
+    notifications.deliver_notifications()
+    assert {str(message["To"]) for message in sent} == {"administrator@example.test"}

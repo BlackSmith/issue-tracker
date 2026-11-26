@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import logging
 import mimetypes
@@ -9,7 +10,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
@@ -33,7 +34,7 @@ from app.notifications import enqueue_notification
 from app.notification_preferences import router as notification_preferences_router
 from app.realtime import router as realtime_router, listen as listen_tickets
 from app.permissions import can_view_item, effective_project_role, visible_item, visible_project
-from app.profiles import avatar_url, profile_json, router as profile_router
+from app.profiles import avatar_url, profile_json, read_avatar, router as profile_router
 from app.references import router as references_router
 from app.tokens import router as tokens_router
 from app.bots import router as bots_router
@@ -122,10 +123,37 @@ def project_json(project, user, db):
     member = db.get(ProjectMember, (project.id, user.id))
     can_write = effective_project_role(project, user, member) in {"owner", "reporter"}
     return {"id": project.id, "key": project.key, "slug": project.key, "legacy_slug": project.slug if project.slug != project.key else None, "name": project.name,
+            "logo_url": f"{api}/projects/{project.id}/logo?v={hashlib.sha256(project.logo).hexdigest()[:16]}" if project.logo else None,
             "description": project.description, "visibility": project.visibility, "can_write": can_write,
             "restrict_ticket_visibility": project.restrict_ticket_visibility,
             "default_access": project.default_access,
             "can_manage": can_manage_project(user, member)}
+
+
+@app.get(api + "/projects/{project_id}/logo", tags=["Projects"])
+def get_project_logo(project_id: str, user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    project = project_access(db, project_id, user)
+    if not project.logo:
+        raise HTTPException(404, "Project logo not found")
+    return Response(project.logo, media_type="image/png",
+                    headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store"})
+
+
+@app.put(api + "/projects/{project_id}/logo", dependencies=[Depends(csrf)], tags=["Projects"])
+async def upload_project_logo(project_id: str, file: UploadFile = File(),
+                              user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    project = project_access(db, project_id, user, manage=True)
+    project.logo = await read_avatar(file, crop=False, label="Project logos")
+    db.commit()
+    return project_json(project, user, db)
+
+
+@app.delete(api + "/projects/{project_id}/logo", dependencies=[Depends(csrf)], tags=["Projects"])
+def delete_project_logo(project_id: str, user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    project = project_access(db, project_id, user, manage=True)
+    project.logo = None
+    db.commit()
+    return project_json(project, user, db)
 
 
 def item_json(item, project):

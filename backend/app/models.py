@@ -122,6 +122,7 @@ class Project(Base):
     key: Mapped[str] = mapped_column(String(10), unique=True)
     slug: Mapped[str] = mapped_column(String(100), unique=True)
     name: Mapped[str] = mapped_column(String(150))
+    logo: Mapped[bytes | None] = mapped_column(LargeBinary)
     description: Mapped[str] = mapped_column(Text, default="")
     visibility: Mapped[str] = mapped_column(String(20), default="private")
     default_access: Mapped[str | None] = mapped_column(String(20))

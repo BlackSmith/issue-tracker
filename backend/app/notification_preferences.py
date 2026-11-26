@@ -1,5 +1,5 @@
 """Authenticated, account-scoped notification settings and ticket participants."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, StrictBool
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,6 +9,7 @@ from app.models import Activity, Comment, ProjectNotificationPreference, TicketN
 from app.permissions import project_user_access
 from app.profiles import avatar_url
 from app.security import browser_user, csrf
+from app.notifications import can_subscribe_project
 
 router = APIRouter(prefix="/api/v1", tags=["Notifications"])
 
@@ -39,7 +40,10 @@ def preference_json(db, user, project, item=None):
 @router.get("/projects/{project_id}/notifications")
 def project_preference(project_id: str, user=Depends(browser_user), db: Session = Depends(get_db)):
     from app.main import project_access
-    return preference_json(db, user, project_access(db, project_id, user))
+    project = project_access(db, project_id, user)
+    if not can_subscribe_project(db, project, user):
+        raise HTTPException(403, "Project owner required")
+    return preference_json(db, user, project)
 
 
 @router.put("/projects/{project_id}/notifications", dependencies=[Depends(csrf)])
@@ -47,6 +51,8 @@ def set_project_preference(project_id: str, payload: PreferenceUpdate,
                            user=Depends(browser_user), db: Session = Depends(get_db)):
     from app.main import project_access
     project = project_access(db, project_id, user)
+    if not can_subscribe_project(db, project, user):
+        raise HTTPException(403, "Project owner required")
     row = db.get(ProjectNotificationPreference, (project.id, user.id))
     if row is None:
         row = ProjectNotificationPreference(project_id=project.id, user_id=user.id)

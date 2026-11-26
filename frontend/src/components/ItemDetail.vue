@@ -26,6 +26,7 @@ function openFullscreen() {
 const item = ref<WorkItem | null>(null), discussion = ref<Discussion[]>([]), attachments = ref<Attachment[]>([])
 const error = ref(''), busy = ref(false), editingContent = ref(false), comment = ref('')
 const checklistBusy = ref(false)
+const attachmentsExpanded = ref(false)
 const commentUploading = ref(false)
 const descriptionUploading = ref(false), contentDraft = ref({ title: '', description: '' })
 const contentOriginal = ref({ title: '', description: '' })
@@ -221,7 +222,10 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
       </form>
       <template v-else><Markdown v-if="item.description" :text="item.description" :project-id="item.project_id" :interactive="canWrite" :busy="busy || checklistBusy" @toggle="(index, checked) => toggleChecklist(index, checked)" /><p v-else class="muted">{{ t('No description yet.') }}</p></template>
       <p v-if="checklistBusy" class="hint" role="status">{{ t('Saving checklist…') }}</p>
-      <section v-if="attachments.length" class="attachments"><h3>{{ t('Attachments') }} <span class="count">{{ attachments.length }}</span></h3><div v-for="a in attachments" :key="a.id" class="attachment-row"><a :href="a.url" target="_blank" rel="noopener">↳ {{ a.filename }} <small>{{ Math.max(1, Math.round(a.size / 1024)) }} KB</small></a><PButton v-if="canWrite" type="button" class="quiet" :disabled="busy || checklistBusy" :aria-label="t('Remove attachment {filename}', { filename: a.filename })" @click="removeAttachment(a)">{{ t('Remove') }}</PButton></div></section>
+      <section v-if="attachments.length" class="attachments">
+        <PButton type="button" class="quiet" :aria-expanded="attachmentsExpanded" :aria-controls="`attachments-${itemId}`" @click="attachmentsExpanded = !attachmentsExpanded"><span aria-hidden="true">{{ attachmentsExpanded ? '▾' : '▸' }}</span>{{ t('Attachments') }} <span class="count">{{ attachments.length }}</span></PButton>
+        <div :id="`attachments-${itemId}`" v-show="attachmentsExpanded"><div v-for="a in attachments" :key="a.id" class="attachment-row"><a :href="a.url" target="_blank" rel="noopener">↳ {{ a.filename }} <small>{{ Math.max(1, Math.round(a.size / 1024)) }} KB</small></a><PButton v-if="canWrite" type="button" class="quiet" :disabled="busy || checklistBusy" :aria-label="t('Remove attachment {filename}', { filename: a.filename })" @click="removeAttachment(a)">{{ t('Remove') }}</PButton></div></div>
+      </section>
       <section class="discussion">
         <h2>{{ t('Activity') }}</h2>
         <div v-for="group in discussionGroups" :key="group.id">
