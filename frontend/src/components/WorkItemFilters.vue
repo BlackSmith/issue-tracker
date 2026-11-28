@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, useId } from 'vue'
-import type { Assignee, LabelDefinition } from '../types'
+import type { Assignee, LabelDefinition, Milestone } from '../types'
 import { itemTypes, priorities, statuses } from '../types'
 import LabelBadge from './LabelBadge.vue'
 import { t } from '../i18n'
@@ -8,14 +8,15 @@ import { auth } from '../api'
 import StatusBadge from './StatusBadge.vue'
 import UserAvatar from './UserAvatar.vue'
 
-export type FilterKey = 'status' | 'label' | 'assignee' | 'priority' | 'type'
+export type FilterKey = 'status' | 'label' | 'assignee' | 'priority' | 'type' | 'milestone'
 export type Filters = Record<FilterKey, string[]>
-const props = defineProps<{ query: string; filters: Filters; labels: LabelDefinition[]; assignees: Assignee[] }>()
+const props = defineProps<{ query: string; filters: Filters; labels: LabelDefinition[]; assignees: Assignee[]; milestones: Milestone[] }>()
 const emit = defineEmits<{ 'update:query': [value: string]; change: [key: FilterKey, values: string[]]; search: [] }>()
 const fields = computed<{ key: FilterKey; name: string; hint: string }[]>(() => [
   { key: 'status', name: 'Status', hint: 'Open, in progress, done…' },
   { key: 'label', name: 'Label', hint: 'Project and organization labels' },
   { key: 'assignee', name: 'Assignee', hint: 'Me, unassigned, or a person' },
+  { key: 'milestone', name: 'Milestone', hint: 'Project milestones or no milestone' },
   { key: 'priority', name: 'Priority', hint: 'Low, medium, high, urgent' },
   { key: 'type', name: 'Type', hint: 'Task, bug, feature' },
 ].map(option => ({ ...option, key: option.key as FilterKey, name: t(option.name), hint: t(option.hint) })))
@@ -34,11 +35,13 @@ const options = computed(() => {
   switch (field.value) {
     case 'label': values = props.labels.map(label => ({ value: label.name, name: label.name })); break
     case 'assignee': values = [{ value: 'me', name: t('Me') }, { value: 'none', name: t('Unassigned') }, ...props.assignees.map(person => ({ value: person.id, name: person.name }))]; break
+    case 'milestone': values = [{ value: 'none', name: t('No milestone') }, ...props.milestones.map(milestone => ({ value: milestone.id, name: milestone.name, hint: milestone.closed ? t('Closed') : undefined }))]; break
     default: values = ({ status: statuses, priority: priorities, type: itemTypes }[field.value]).map(value => ({ value, name: t(value) }))
   }
   return values.filter(option => option.name.toLowerCase().includes(term.value.toLowerCase()))
 })
 function valueName(key: FilterKey, value: string) {
+  if (key === 'milestone') return value === 'none' ? t('No milestone') : props.milestones.find(milestone => milestone.id === value)?.name || t('Milestone unavailable')
   if (key !== 'assignee') return key === 'label' ? value : t(value)
   return value === 'me' ? t('Me') : value === 'none' ? t('Unassigned') : props.assignees.find(person => person.id === value)?.name || t('User unavailable')
 }

@@ -28,6 +28,8 @@ test('generated activity is localized without translating embedded user content'
   assert.equal(activityText('updated status, labels'), 'změnil(a): Stav, Štítky')
   assert.equal(activityText('updated status from "Open" to "Done", assignee from "Open" to "Done", labels to ["High", "a, b"]'),
     'změnil(a): Stav z "Otevřeno" na "Hotovo", Řešitel z "Open" na "Done", Štítky na ["High", "a, b"]')
+  assert.equal(activityText('updated milestone from "Open, \\"Phase 1\\"" to No milestone'),
+    'změnil(a): Milník z "Open, \\"Phase 1\\"" na Bez milníku')
   assert.equal(activityText('checked checklist item #1 "Open, High" in a comment'), 'zaškrtl(a) položku seznamu úkolů č. 1 „Open, High“ v komentáři')
   assert.equal(activityText('unknown historical activity'), 'unknown historical activity')
   language.value = 'en'

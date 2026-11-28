@@ -5,10 +5,11 @@ import { api } from '../api'
 import type { Project } from '../types'
 import ProjectMembers from './ProjectMembers.vue'
 import LabelManager from './LabelManager.vue'
+import MilestoneManager from './MilestoneManager.vue'
 import { t } from '../i18n'
 
 const props = defineProps<{ project: Project }>()
-const emit = defineEmits<{ close: []; updated: [project: Project]; labelsUpdated: []; permissionsUpdated: [] }>()
+const emit = defineEmits<{ close: []; updated: [project: Project]; labelsUpdated: []; milestonesUpdated: []; permissionsUpdated: [] }>()
 const tab = ref('general'), busy = ref(false), error = ref(''), message = ref('')
 const form = ref({ name: props.project.name, description: props.project.description, visibility: props.project.visibility, default_access: props.project.default_access, restrict_ticket_visibility: props.project.restrict_ticket_visibility })
 const logoInput = ref<HTMLInputElement | null>(null)
@@ -56,6 +57,7 @@ async function save() {
           <PTab value="general" :disabled="busy">{{ t('General') }}</PTab>
           <PTab value="members" :disabled="busy">{{ t('Members') }}</PTab>
           <PTab value="labels" :disabled="busy">{{ t('Labels') }}</PTab>
+          <PTab value="milestones" :disabled="busy">{{ t('Milestones') }}</PTab>
         </PTabList>
         <PTabPanels>
           <PTabPanel value="general">
@@ -84,6 +86,7 @@ async function save() {
           </PTabPanel>
           <PTabPanel value="members"><ProjectMembers v-if="tab === 'members'" :project="project" embedded @updated="emit('permissionsUpdated')" /></PTabPanel>
           <PTabPanel value="labels"><LabelManager v-if="tab === 'labels'" :project-id="project.id" @updated="emit('labelsUpdated')" /></PTabPanel>
+          <PTabPanel value="milestones"><MilestoneManager v-if="tab === 'milestones'" :project-id="project.id" @updated="emit('milestonesUpdated')" /></PTabPanel>
         </PTabPanels>
       </PTabs>
   </PDialog>

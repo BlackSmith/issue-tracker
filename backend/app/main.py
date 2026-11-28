@@ -25,7 +25,7 @@ from app.attachments import cleanup_loop, confirm_attachments
 from app.checklists import content_version, set_checklist_item
 from app.db import get_db
 from app.labels import available_labels, label_json, lock_catalog, validate_labels
-from app.models import (Activity, Attachment, Comment, ExternalIdentity, Project,
+from app.models import (Activity, Attachment, Comment, ExternalIdentity, Milestone, Project,
                         ProjectMember, User, WorkItem, Label, new_id, utcnow)
 from app.providers import OIDCProvider, FacebookProvider
 from app.passwords import router as passwords_router, establish_session, auth_details
@@ -38,7 +38,7 @@ from app.profiles import avatar_url, profile_json, read_avatar, router as profil
 from app.references import router as references_router
 from app.tokens import router as tokens_router
 from app.bots import router as bots_router
-from app.schemas import ApplicationUserUpdate, ChecklistUpdate, CommentCreate, ItemCreate, ItemUpdate, ItemType, LabelCreate, MemberCreate, Priority, ProjectCreate, ProjectUpdate, Status, TicketPublication
+from app.schemas import ApplicationUserUpdate, ChecklistUpdate, CommentCreate, ItemCreate, ItemUpdate, ItemType, LabelCreate, MemberCreate, MilestoneState, MilestoneWrite, Priority, ProjectCreate, ProjectUpdate, Status, TicketPublication
 from app.security import ServerSessionMiddleware, browser_user, csrf, maybe_user, organization_user
 
 settings = get_settings()
@@ -163,6 +163,7 @@ def item_json(item, project):
             "is_project_public": item.is_project_public,
             "author": {"id": item.author_id, "name": item.author.name},
             "assignee_id": item.assignee_id, "assignee": assignee_json(item.assignee) if item.assignee else None,
+             "milestone_id": item.milestone_id,
              **{key: getattr(item, key) for key in ("title", "description", "type", "status", "priority", "labels", "due_date", "created_at", "updated_at")}}
 
 
@@ -478,12 +479,78 @@ def item_assignees(project_id: str, user: User = Depends(organization_user), db:
         select(User).where(User.id.in_(assigned)).order_by(User.name, User.id))]
 
 
+def milestone_json(milestone):
+    return {field: getattr(milestone, field) for field in ("id", "project_id", "name", "description", "due_date", "closed")}
+
+
+@app.get(api + "/projects/{project_id}/milestones", tags=["Milestones"])
+def project_milestones(project_id: str, user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    project_access(db, project_id, user)
+    return [milestone_json(row) for row in db.scalars(select(Milestone).where(
+        Milestone.project_id == project_id).order_by(Milestone.closed, Milestone.due_date.nulls_last(), Milestone.name))]
+
+
+def project_milestone(db, project_id, milestone_id):
+    milestone = db.scalar(select(Milestone).where(Milestone.project_id == project_id, Milestone.id == milestone_id))
+    if not milestone:
+        raise HTTPException(404, "Milestone not found")
+    return milestone
+
+
+def save_milestone(db, milestone, payload):
+    for field, value in payload.model_dump().items():
+        setattr(milestone, field, value)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(409, "A milestone with this name already exists in this project") from exc
+    return milestone_json(milestone)
+
+
+@app.post(api + "/projects/{project_id}/milestones", status_code=201, dependencies=[Depends(csrf)], tags=["Milestones"])
+def create_milestone(project_id: str, payload: MilestoneWrite, user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    project_access(db, project_id, user, manage=True)
+    milestone = Milestone(project_id=project_id)
+    db.add(milestone)
+    return save_milestone(db, milestone, payload)
+
+
+@app.put(api + "/projects/{project_id}/milestones/{milestone_id}", dependencies=[Depends(csrf)], tags=["Milestones"])
+def edit_milestone(project_id: str, milestone_id: UUID, payload: MilestoneWrite,
+                   user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    project_access(db, project_id, user, manage=True)
+    return save_milestone(db, project_milestone(db, project_id, str(milestone_id)), payload)
+
+
+@app.put(api + "/projects/{project_id}/milestones/{milestone_id}/state", dependencies=[Depends(csrf)], tags=["Milestones"])
+def set_milestone_state(project_id: str, milestone_id: UUID, payload: MilestoneState,
+                        user: User = Depends(organization_user), db: Session = Depends(get_db)):
+    project_access(db, project_id, user, manage=True)
+    milestone = project_milestone(db, project_id, str(milestone_id))
+    milestone.closed = payload.closed
+    db.commit()
+    return milestone_json(milestone)
+
+
+def assignable_milestone(db, project_id, milestone_id):
+    # Serialize new assignments with closing the milestone.
+    milestone = db.scalar(select(Milestone).where(Milestone.project_id == project_id,
+                                                  Milestone.id == milestone_id).with_for_update(read=True))
+    if not milestone:
+        raise HTTPException(422, "Select a milestone from this project")
+    if milestone.closed:
+        raise HTTPException(409, "Closed milestones cannot be assigned")
+    return milestone
+
+
 @app.get(api + "/projects/{project_id}/items", tags=["Work items"])
 def items(project_id: str, q: str = Query("", max_length=200), status: list[Status] | None = Query(None, max_length=100),
           label: list[Annotated[str, Field(max_length=50)]] | None = Query(None, max_length=100),
           priority: list[Priority] | None = Query(None, max_length=100),
           type: list[ItemType] | None = Query(None, max_length=100),
           assignee: list[UUID | Literal["me", "none"]] | None = Query(None, max_length=100),
+          milestone: list[UUID | Literal["none"]] | None = Query(None, max_length=100),
           sort: str = Query("updated", pattern="^(updated|created|title|priority|due_date)$"),
           direction: Literal["asc", "desc"] | None = Query(None),
           page: int = Query(1, ge=1), per_page: int = Query(25, ge=1, le=100),
@@ -510,6 +577,12 @@ def items(project_id: str, q: str = Query("", max_length=200), status: list[Stat
         from sqlalchemy import cast
         from sqlalchemy.dialects.postgresql import JSONB
         query = query.where(or_(*(cast(WorkItem.labels, JSONB).contains([name]) for name in set(label))))
+    if milestone:
+        ids = [str(value) for value in milestone if value != "none"]
+        conditions = [WorkItem.milestone_id.in_(ids)] if ids else []
+        if "none" in milestone:
+            conditions.append(WorkItem.milestone_id.is_(None))
+        query = query.where(or_(*conditions))
     total = db.scalar(select(func.count()).select_from(query.subquery()))
     column = {"updated": WorkItem.updated_at, "created": WorkItem.created_at, "title": WorkItem.title,
               "priority": case({"Low": 0, "Medium": 1, "High": 2, "Urgent": 3}, value=WorkItem.priority),
@@ -527,6 +600,8 @@ def create_item(project_id: str, payload: ItemCreate, user: User = Depends(organ
     lock_catalog(db)
     validate_labels(db, project_id, payload.labels)
     assignee = resolve_assignee(db, project, payload.assignee_id)
+    if payload.milestone_id:
+        assignable_milestone(db, project_id, str(payload.milestone_id))
     number = db.scalar(update(Project).where(Project.id == project_id).values(next_number=Project.next_number + 1).returning(Project.next_number))
     item = WorkItem(project_id=project_id, number=number, author_id=user.id, assignee=assignee, **payload.model_dump())
     db.add(item)
@@ -584,7 +659,10 @@ def publish_item(item_id: str, payload: TicketPublication, user: User = Depends(
 
 @app.put(api + "/items/{item_id}", dependencies=[Depends(csrf)], tags=["Work items"])
 def edit_item(item_id: str, payload: ItemCreate, user: User = Depends(organization_user), db: Session = Depends(get_db)):
-    return update_item(item_id, payload.model_dump(), user, db)
+    values = payload.model_dump()
+    if "milestone_id" not in payload.model_fields_set:
+        values.pop("milestone_id")
+    return update_item(item_id, values, user, db)
 
 
 @app.patch(api + "/items/{item_id}", dependencies=[Depends(csrf)], tags=["Work items"])
@@ -593,7 +671,7 @@ def patch_item(item_id: str, payload: ItemUpdate, user: User = Depends(organizat
 
 
 def metadata_change(field, previous, current):
-    empty = {"assignee": "Unassigned", "labels": "No labels"}.get(field, "Not set")
+    empty = {"assignee": "Unassigned", "labels": "No labels", "milestone": "No milestone"}.get(field, "Not set")
 
     def display(value):
         if not value:
@@ -628,6 +706,12 @@ def update_item(item_id, values, user, db):
                 previous = item.assignee.name if item.assignee else None
                 item.assignee = resolve_assignee(db, project, value)
                 changed.append(metadata_change("assignee", previous, item.assignee.name if item.assignee else None))
+            elif key == "milestone_id":
+                previous = db.get(Milestone, item.milestone_id) if item.milestone_id else None
+                milestone = assignable_milestone(db, project.id, value) if value else None
+                item.milestone_id = value
+                changed.append(metadata_change("milestone", previous.name if previous else None,
+                                               milestone.name if milestone else None))
             else:
                 previous = getattr(item, key)
                 setattr(item, key, value)

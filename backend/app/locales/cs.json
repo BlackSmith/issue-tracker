@@ -1,4 +1,6 @@
 {
+  "milestone": "milník",
+  "No milestone": "bez milníku",
   "This email was sent from {server} because you are a member of project {project} and a recipient of this ticket's notifications.": "Tento e-mail byl odeslán ze serveru {server}, protože jste členem projektu {project} a patříte mezi příjemce oznámení tohoto ticketu.",
   "Assignment and direct mentions may still notify you when notifications are disabled.": "I při vypnutých notifikacích vám mohou chodit oznámení kvůli přiřazení nebo přímé zmínce.",
   "Manage ticket notifications": "Spravovat notifikace ticketu",

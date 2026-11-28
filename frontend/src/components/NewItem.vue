@@ -1,16 +1,29 @@
 <script setup lang="ts">
-import { defineAsyncComponent, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
-import type { LabelDefinition, Project, WorkItem } from '../types'
+import type { LabelDefinition, Milestone, Project, WorkItem } from '../types'
 import LabelPicker from './LabelPicker.vue'
 import { itemTypes, priorities } from '../types'
 import { t, translatedOptions } from '../i18n'
+import { ticketRevision } from '../realtime'
 
 const RichTextEditor = defineAsyncComponent(() => import('./RichTextEditor.vue'))
 const props = defineProps<{ project: Project; standalone: boolean }>()
 const emit = defineEmits<{ close: []; toggleView: []; created: [item: WorkItem] }>()
-const form = ref({ title: '', description: '', type: 'Task', status: 'Open', priority: 'Medium', labels: [] as string[], due_date: '' })
+const form = ref({ title: '', description: '', type: 'Task', status: 'Open', priority: 'Medium', labels: [] as string[], due_date: '', milestone_id: '' })
 const labels = ref<LabelDefinition[]>([])
+const milestones = ref<Milestone[]>([])
+const milestoneOptions = computed(() => [
+  { id: '', name: t('No milestone') },
+  ...milestones.value.filter(milestone => !milestone.closed || milestone.id === form.value.milestone_id)
+    .map(milestone => ({ id: milestone.id, name: milestone.closed ? t('{name} (closed)', { name: milestone.name }) : milestone.name, disabled: milestone.closed })),
+])
+async function loadMilestones() {
+  try { milestones.value = await api<Milestone[]>(`/projects/${props.project.id}/milestones`) }
+  catch (e) { error.value = (e as Error).message }
+}
+onMounted(loadMilestones)
+watch(ticketRevision, loadMilestones)
 onMounted(async () => {
   try { labels.value = await api<LabelDefinition[]>(`/projects/${props.project.id}/labels`) }
   catch (e) { error.value = (e as Error).message }
@@ -28,10 +41,13 @@ async function create() {
   try {
     const item = await api<WorkItem>(`/projects/${props.project.id}/items`, {
       method: 'POST',
-      body: JSON.stringify({ ...form.value, due_date: form.value.due_date || null }),
+      body: JSON.stringify({ ...form.value, due_date: form.value.due_date || null, milestone_id: form.value.milestone_id || null }),
     })
     emit('created', item)
-  } catch (e) { error.value = (e as Error).message }
+  } catch (e) {
+    error.value = (e as Error).message
+    if ((e as { status?: number }).status === 409) await loadMilestones()
+  }
   finally { busy.value = false }
 }
 </script>
@@ -56,6 +72,7 @@ async function create() {
             <label>{{ t('Type') }}<PSelect v-model="form.type" :options="translatedOptions(itemTypes)" option-label="label" option-value="value" :disabled="busy" :aria-label="t('Type')" /></label>
             <label>{{ t('Priority') }}<PSelect v-model="form.priority" :options="translatedOptions(priorities)" option-label="label" option-value="value" :disabled="busy" :aria-label="t('Priority')" /></label>
             <label>{{ t('Due date') }}<InputText v-model="form.due_date" type="date" :disabled="busy" /></label>
+            <label>{{ t('Milestone') }}<PSelect v-model="form.milestone_id" :options="milestoneOptions" option-label="name" option-value="id" option-disabled="disabled" filter :disabled="busy" :aria-label="t('Milestone')" /></label>
             <LabelPicker v-model="form.labels" :definitions="labels" :disabled="busy" />
           </aside>
         </div>

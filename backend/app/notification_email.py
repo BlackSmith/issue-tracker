@@ -6,8 +6,8 @@ from pathlib import Path
 
 catalog = json.loads((Path(__file__).parent / "locales" / "cs.json").read_text(encoding="utf-8"))
 quoted = r'"(?:[^"\\]|\\.)*"'
-value = rf'(?:{quoted}|\[(?:{quoted}(?:, {quoted})*)?\]|Unassigned|No labels|Not set)'
-metadata = re.compile(rf'^(status|type|priority|due date|labels|assignee)(?: from ({value}))? to ({value})(?:, |$)')
+value = rf'(?:{quoted}|\[(?:{quoted}(?:, {quoted})*)?\]|Unassigned|No labels|No milestone|Not set)'
+metadata = re.compile(rf'^(status|type|priority|due date|labels|assignee|milestone)(?: from ({value}))? to ({value})(?:, |$)')
 
 
 def translate(message, language, **parameters):

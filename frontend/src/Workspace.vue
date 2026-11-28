@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, provide, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, auth } from './api'
-import type { Assignee, LabelDefinition, Project, WorkItem } from './types'
+import type { Assignee, LabelDefinition, Milestone, Project, WorkItem } from './types'
 import LabelBadge from './components/LabelBadge.vue'
 import StatusBadge from './components/StatusBadge.vue'
 import WorkItemFilters, { type FilterKey, type Filters } from './components/WorkItemFilters.vue'
@@ -20,6 +20,7 @@ provide(notificationPreferenceUpdate, shallowRef(null))
 const projects = ref<Project[]>([]), items = ref<WorkItem[]>([]), total = ref(0)
 const labels = ref<LabelDefinition[]>([])
 const assignees = ref<Assignee[]>([])
+const milestoneCatalog = ref<Milestone[]>([])
 const loading = ref(true), error = ref(''), busy = ref(false)
 const showProject = ref(false), showSettings = ref(false)
 const settingsButton = ref<{ $el: HTMLButtonElement } | null>(null)
@@ -30,6 +31,8 @@ const projectId = computed(() => String(route.params.projectId
   || projects.value.find(p => p.legacy_slug === route.params.projectSlug)?.id
   || (resolvedPath.value === route.path ? resolvedItem.value?.project_id : '') || ''))
 const project = computed(() => projects.value.find(p => p.id === projectId.value))
+const milestones = computed(() => milestoneCatalog.value.filter(milestone => milestone.project_id === projectId.value))
+const milestoneNames = computed(() => new Map(milestones.value.map(milestone => [milestone.id, milestone.name])))
 const projectPath = computed(() => project.value ? `/${project.value.slug}/` : '/')
 const hasProjectRoute = computed(() => !!route.params.projectSlug || !!route.params.projectId)
 const itemId = computed(() => resolvedPath.value === route.path ? resolvedItem.value?.id || '' : '')
@@ -39,14 +42,16 @@ const creatingItem = computed(() => route.name === 'new-item')
 const standalone = computed(() => (ticketRoute.value || creatingItem.value) && route.query.view !== 'panel')
 const q = ref(''), status = ref<string[]>([...defaultStatuses]), label = ref<string[]>([]), sort = ref('updated')
 const priority = ref<string[]>([]), type = ref<string[]>([]), assignee = ref<string[]>([]), direction = ref('desc')
+const milestone = ref<string[]>([])
 const sortOptions = computed(() => [
   { label: 'Updated date', value: 'updated' }, { label: 'Created date', value: 'created' },
   { label: 'Title', value: 'title' }, { label: 'Priority', value: 'priority' }, { label: 'Due date', value: 'due_date' },
 ].map(option => ({ ...option, label: t(option.label) })))
-const filters = computed<Filters>(() => ({ status: status.value, label: label.value, priority: priority.value, type: type.value, assignee: assignee.value }))
-const hasFilters = computed(() => !!q.value || !isDefaultStatusFilter(status.value) || label.value.length > 0 || priority.value.length > 0 || type.value.length > 0 || assignee.value.length > 0)
+const filters = computed<Filters>(() => ({ status: status.value, label: label.value, priority: priority.value, type: type.value, assignee: assignee.value, milestone: milestone.value }))
+const extraFilters = ['priority', 'type', 'assignee', 'milestone'] as const
+const hasFilters = computed(() => !!q.value || !isDefaultStatusFilter(status.value) || label.value.length > 0 || extraFilters.some(key => filters.value[key].length))
 const page = computed(() => Number(route.query.page) || 1)
-const listQueryKeys = ['q', 'status', 'label', 'priority', 'type', 'assignee', 'sort', 'direction', 'page']
+const listQueryKeys = ['q', 'status', 'label', ...extraFilters, 'sort', 'direction', 'page']
 const listKey = computed(() => JSON.stringify([projectId.value, ...listQueryKeys.map(key => route.query[key])]))
 const loadedListKey = ref('')
 const listLoading = computed(() => loading.value && listKey.value !== loadedListKey.value)
@@ -100,20 +105,23 @@ async function load(background = false) {
     label.value = readFilterValues(route.query.label); sort.value = String(route.query.sort || 'updated')
     priority.value = readFilterValues(route.query.priority); type.value = readFilterValues(route.query.type)
     assignee.value = readFilterValues(route.query.assignee)
+    milestone.value = readFilterValues(route.query.milestone)
     direction.value = String(route.query.direction || defaultDirection(sort.value))
     if (projectId.value && !standalone.value) {
       const key = listKey.value
-      const [definitions, people] = await Promise.all([
+      const [definitions, people, catalog] = await Promise.all([
         api<LabelDefinition[]>(`/projects/${projectId.value}/labels`),
         api<Assignee[]>(`/projects/${projectId.value}/item-assignees`),
+        api<Milestone[]>(`/projects/${projectId.value}/milestones`),
       ])
       if (current !== sequence) return
       labels.value = definitions
       assignees.value = people
+      milestoneCatalog.value = catalog
       const params = new URLSearchParams({ q: q.value, sort: sort.value, direction: direction.value, page: String(page.value) })
       status.value.forEach(value => params.append('status', value))
       label.value.forEach(value => params.append('label', value))
-      for (const key of ['priority', 'type', 'assignee'] as const) filters.value[key].forEach(value => params.append(key, value))
+      for (const key of extraFilters) filters.value[key].forEach(value => params.append(key, value))
       const result = await api<{ items: WorkItem[]; total: number }>(`/projects/${projectId.value}/items?${params}`)
       if (current !== sequence) return
       items.value = result.items; total.value = result.total
@@ -145,19 +153,19 @@ function filter(reset = true) {
   if (label.value.length) query.label = label.value
   if (sort.value !== 'updated') query.sort = sort.value
   if (direction.value !== defaultDirection(sort.value)) query.direction = direction.value
-  for (const key of ['priority', 'type', 'assignee'] as const) if (filters.value[key].length) query[key] = filters.value[key]
+  for (const key of extraFilters) if (filters.value[key].length) query[key] = filters.value[key]
   if (!reset && page.value > 1) query.page = String(page.value)
   router.push({ path: projectPath.value, query })
 }
 function defaultDirection(value: string) { return ['title', 'due_date'].includes(value) ? 'asc' : 'desc' }
 function changeFilter(key: FilterKey, values: string[]) {
-  const targets = { status, label, priority, type, assignee }
+  const targets = { status, label, priority, type, assignee, milestone }
   targets[key].value = values
   filter()
 }
 function changeSort() { direction.value = defaultDirection(sort.value); filter() }
 function resetFilters() {
-  q.value = ''; status.value = [...defaultStatuses]; label.value = []; priority.value = []; type.value = []; assignee.value = []
+  q.value = ''; status.value = [...defaultStatuses]; label.value = []; priority.value = []; type.value = []; assignee.value = []; milestone.value = []
   filter()
 }
 function closeItem() {
@@ -217,7 +225,7 @@ function itemCreated(item: WorkItem) {
         </header>
         <template v-if="project">
           <div class="work-item-toolbar">
-            <WorkItemFilters v-model:query="q" :filters="filters" :labels="labels" :assignees="assignees" @change="changeFilter" @search="filter()" />
+            <WorkItemFilters v-model:query="q" :filters="filters" :labels="labels" :assignees="assignees" :milestones="milestones" @change="changeFilter" @search="filter()" />
           </div>
           <div class="list-caption">
             <div class="list-caption-info">
@@ -246,6 +254,7 @@ function itemCreated(item: WorkItem) {
                     <span>{{ t('Last updated') }}: <time :datetime="item.updated_at">{{ dateTime(item.updated_at) }}</time></span>
                     <span>{{ t('Author') }}: {{ item.author.name }}</span>
                     <span>{{ t('Assignee') }}: {{ item.assignee?.name ?? t('Unassigned') }}</span>
+                    <span v-if="item.milestone_id && milestoneNames.has(item.milestone_id)">{{ t('Milestone') }}: {{ milestoneNames.get(item.milestone_id) }}</span>
                   </span>
                   <span v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></span>
                 </span>
@@ -276,7 +285,7 @@ function itemCreated(item: WorkItem) {
         <PMessage v-if="error" severity="error">{{ t(error) }}</PMessage><footer><PButton type="button" severity="secondary" outlined :disabled="busy" @click="showProject = false">{{ t('Cancel') }}</PButton><PButton type="submit" :loading="busy" :disabled="busy">{{ t('Create project') }}</PButton></footer>
       </form>
   </PDialog>
-  <ProjectSettings v-if="showSettings && project?.can_manage" :key="project.id" :project="project" @close="closeSettings" @labels-updated="load" @permissions-updated="load" @updated="updated => projects = projects.map(p => p.id === updated.id ? updated : p)" />
+  <ProjectSettings v-if="showSettings && project?.can_manage" :key="project.id" :project="project" @close="closeSettings" @labels-updated="load" @milestones-updated="load(true)" @permissions-updated="load" @updated="updated => projects = projects.map(p => p.id === updated.id ? updated : p)" />
 </template>
 
 <style scoped>

@@ -2,7 +2,7 @@ import time
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Index, JSON, LargeBinary, String, Text, UniqueConstraint, false, func
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, ForeignKeyConstraint, Index, JSON, LargeBinary, String, Text, UniqueConstraint, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -147,9 +147,28 @@ class Label(Base):
     __table_args__ = (Index("uq_labels_scope_name", func.coalesce(project_id, ""), name, unique=True),)
 
 
+class Milestone(Base):
+    __tablename__ = "milestones"
+    __table_args__ = (
+        UniqueConstraint("project_id", "id", name="uq_milestones_project_id_id"),
+        UniqueConstraint("project_id", "name", name="uq_milestones_project_name"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"))
+    name: Mapped[str] = mapped_column(String(150))
+    description: Mapped[str] = mapped_column(Text, default="")
+    due_date: Mapped[date | None] = mapped_column(Date)
+    closed: Mapped[bool] = mapped_column(default=False, server_default=false())
+
+
 class WorkItem(Base):
     __tablename__ = "work_items"
-    __table_args__ = (UniqueConstraint("project_id", "number"),)
+    __table_args__ = (
+        UniqueConstraint("project_id", "number"),
+        ForeignKeyConstraint(["project_id", "milestone_id"], ["milestones.project_id", "milestones.id"],
+                             name="fk_work_items_project_milestone"),
+        Index("ix_work_items_project_milestone", "project_id", "milestone_id"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), index=True)
     number: Mapped[int]
@@ -160,6 +179,7 @@ class WorkItem(Base):
     priority: Mapped[str] = mapped_column(String(20), default="Medium")
     labels: Mapped[list[str]] = mapped_column(JSON, default=list)
     due_date: Mapped[date | None] = mapped_column(Date)
+    milestone_id: Mapped[str | None] = mapped_column(String(36))
     assignee_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
     assignee: Mapped[User | None] = relationship(foreign_keys=[assignee_id], lazy="selectin")
     author_id: Mapped[str] = mapped_column(ForeignKey("users.id"))

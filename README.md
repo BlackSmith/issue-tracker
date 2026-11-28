@@ -88,6 +88,9 @@ Connect through your organization's identity provider or an administrator-manage
   Done and Canceled. Reset filters restores that default view while retaining sorting.
 - Side-panel and standalone work item creation and detail, with draft-preserving
   switching between creation presentations and list filters preserved on return.
+- Project Owners manage milestones with optional descriptions and target dates.
+  Ticket writers can assign one milestone per ticket. Closed milestones keep
+  their assignments and remain filterable; they are unavailable for new assignments.
 - Readable project URLs such as `/product-development/` and ticket URLs using
   the same stable slug plus project-scoped number, such as `/product-development/123`.
 - WYSIWYG descriptions and comments with a formatting toolbar, headings, lists,
@@ -105,7 +108,7 @@ Connect through your organization's identity provider or an administrator-manage
 
 This is an initial development increment. External identity invitations and identity
 linking in the UI, trusted-provider
-automatic membership, hierarchy/relationships, milestones, Kanban, saved views,
+automatic membership, hierarchy/relationships, Kanban, saved views,
 webhooks/worker are planned.
 Each account currently uses one authentication method. MFA is deferred; future
 application-managed MFA is intended for local passwords only.

@@ -1,7 +1,8 @@
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, field_serializer, field_validator, model_validator
 from email_validator import EmailNotValidError, validate_email
 from app.project_slugs import RESERVED_PROJECT_SLUGS
 
@@ -112,6 +113,18 @@ class LabelCreate(BaseModel):
         return value.strip()
 
 
+class MilestoneWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=150)]
+    description: str = Field(default="", max_length=2000)
+    due_date: date | None = None
+
+
+class MilestoneState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    closed: StrictBool
+
+
 class ItemCreate(BaseModel):
     title: str = Field(min_length=1, max_length=250)
     description: str = Field(default="", max_length=100000)
@@ -121,6 +134,11 @@ class ItemCreate(BaseModel):
     labels: list[str] = Field(default_factory=list, max_length=20)
     due_date: date | None = None
     assignee_id: str | None = Field(default=None, min_length=1, max_length=36)
+    milestone_id: UUID | None = None
+
+    @field_serializer("milestone_id")
+    def serialize_milestone_id(self, value):
+        return str(value) if value is not None else None
 
     @field_validator("title")
     @classmethod
@@ -152,8 +170,8 @@ class ItemUpdate(ItemCreate):
     @model_validator(mode="before")
     @classmethod
     def nonnullable_fields(cls, values):
-        if isinstance(values, dict) and any(value is None and key not in {"due_date", "assignee_id", "expected"} for key, value in values.items()):
-            raise ValueError("Only due_date and assignee_id can be null")
+        if isinstance(values, dict) and any(value is None and key not in {"due_date", "assignee_id", "milestone_id", "expected"} for key, value in values.items()):
+            raise ValueError("Only due_date, assignee_id and milestone_id can be null")
         return values
 
     @model_validator(mode="after")

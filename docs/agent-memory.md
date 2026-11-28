@@ -24,6 +24,12 @@
 - `frontend/src/realtime.ts` owns one reconnecting socket per mounted workspace, coalesces refreshes for 150 ms and refreshes on visibility return/reconnection. Background loads retain mounted editors and drafts. PATCH accepts an optional `expected` map of previous edited-field values, compared under the ticket row lock; the UI supplies it for metadata and title/description edits. Conflicts return 409 and preserve drafts until canceled. REST clients omitting expected retain existing update semantics.
 - Shared Chromium at `http://host.docker.internal:5374` verified separate real administrator/member OIDC sessions, live list/detail updates, comments/checklists/attachments, bot token changes, preserved comment/content/metadata drafts, conflict detection, visibility revocation, reconnection catch-up, and 1440px/390px layouts (2026-11-25). Production Nginx and development Vite both forward WebSocket upgrades; outer proxies must do the same.
 
+## Project Milestones
+
+- Migration `0019` adds nullable ticket assignments; the composite foreign key enforces same-project assignments. New assignments take a PostgreSQL `FOR SHARE` lock on the selected milestone so they serialize with closure. Existing assignments remain editable and filterable after closing; old `PUT /items/{id}` calls omitting `milestone_id` preserve it, while explicit `null` clears it.
+- Filter values use stable milestone UUIDs (or `none` for tickets without a milestone), and the ticket visibility predicate also applies to filtered totals. Catalog changes use project-scoped realtime invalidation. PostgreSQL upgrade and `alembic check` passed.
+- Shared Chromium verified the owner and read-only flows with real OIDC sessions, including closed and unassigned filters after reload, Czech and English UI, and a 390px layout (2026-11-28).
+
 ## Local Password Browser Verification
 
 - Migrations `0010`/`0011` add local credentials, hashed one-time links with encrypted email bodies, login throttles, and nanosecond creation ordering for outbox messages. Browser sessions carry `auth_version`; legacy sessions default to zero. Reset/setup/login-email changes and disable increment the user version, so in-flight middleware writes cannot resurrect usable revoked credentials. Password change rotates and preserves only the caller's new session. API tokens remain independent.

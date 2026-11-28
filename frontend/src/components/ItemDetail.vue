@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api'
-import type { Assignee, Attachment, Discussion, LabelDefinition, WorkItem } from '../types'
+import type { Assignee, Attachment, Discussion, LabelDefinition, Milestone, WorkItem } from '../types'
 import LabelBadge from './LabelBadge.vue'
 import { itemTypes, priorities, statuses } from '../types'
 import Markdown from '../Markdown.vue'
@@ -59,6 +59,13 @@ async function copyLink() {
 }
 const assignees = ref<Assignee[]>([]), assigneesReady = ref(false)
 const labels = ref<LabelDefinition[]>([]), labelsReady = ref(false)
+const milestones = ref<Milestone[]>([]), milestonesReady = ref(false)
+const currentMilestone = computed(() => milestones.value.find(milestone => milestone.id === item.value?.milestone_id))
+const milestoneOptions = computed(() => [
+  { value: '', label: t('No milestone') },
+  ...milestones.value.filter(milestone => !milestone.closed || milestone.id === item.value?.milestone_id)
+    .map(milestone => ({ value: milestone.id, label: milestone.closed ? t('{name} (closed)', { name: milestone.name }) : milestone.name, disabled: milestone.closed })),
+])
 const assigneeOptions = computed(() => {
   const options: { value: string; label: string; disabled?: boolean }[] = [{ value: '', label: t('Unassigned') }, ...assignees.value.map(user => ({ value: user.id, label: user.name + (user.is_bot ? t(' (Bot)') : '') }))]
   if (item.value?.assignee && !assignees.value.some(user => user.id === item.value?.assignee_id)) {
@@ -89,8 +96,15 @@ async function load() {
     const [i, d, a] = await Promise.all([api<WorkItem>(`/items/${props.itemId}`), api<Discussion[]>(`/items/${props.itemId}/discussion`), api<Attachment[]>(`/items/${props.itemId}/attachments`)])
     if (sequence !== loadSequence) return
     item.value = i; discussion.value = d; attachments.value = a
-    labels.value = await api<LabelDefinition[]>(`/projects/${i.project_id}/labels`)
+    const [definitions, catalog] = await Promise.all([
+      api<LabelDefinition[]>(`/projects/${i.project_id}/labels`),
+      api<Milestone[]>(`/projects/${i.project_id}/milestones`),
+    ])
+    if (sequence !== loadSequence) return
+    labels.value = definitions
     labelsReady.value = true
+    milestones.value = catalog
+    milestonesReady.value = true
     if (props.canWrite) {
       assignees.value = await api<Assignee[]>(`/projects/${i.project_id}/assignees`)
       assigneesReady.value = true
@@ -112,10 +126,10 @@ watch(ticketRevision, () => {
 watch([busy, checklistBusy], () => {
   if (pendingRefresh && !busy.value && !checklistBusy.value) { pendingRefresh = false; load() }
 })
-type EditableField = 'type' | 'status' | 'priority' | 'due_date' | 'labels' | 'assignee_id'
+type EditableField = 'type' | 'status' | 'priority' | 'due_date' | 'labels' | 'assignee_id' | 'milestone_id'
 function saveField(field: EditableField) {
   return (value: string, original: string) => {
-    const decode = (v: string) => field === 'labels' ? JSON.parse(v) : field === 'due_date' || field === 'assignee_id' ? v || null : v
+    const decode = (v: string) => field === 'labels' ? JSON.parse(v) : ['due_date', 'assignee_id', 'milestone_id'].includes(field) ? v || null : v
     return saveFields({ [field]: decode(value) }, { [field]: decode(original) })
   }
 }
@@ -258,6 +272,7 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
           <section><ItemField :label="t('Type')" kind="select" :value="item.type" :options="itemTypes" :can-write="canWrite" :disabled="busy || checklistBusy" :save="saveField('type')" @editing="error = ''"><span>{{ t(item.type) }}</span></ItemField></section>
           <section><ItemField :label="t('Priority')" kind="select" :value="item.priority" :options="priorities" :can-write="canWrite" :disabled="busy || checklistBusy" :save="saveField('priority')" @editing="error = ''"><span class="priority" :class="item.priority.toLowerCase()">{{ t(item.priority) }}</span></ItemField></section>
           <section><ItemField :label="t('Due date')" kind="date" :value="item.due_date || ''" :can-write="canWrite" :disabled="busy || checklistBusy" :save="saveField('due_date')" @editing="error = ''"><span>{{ item.due_date ? dateOnly(item.due_date) : t('Not set') }}</span></ItemField></section>
+          <section><ItemField :label="t('Milestone')" kind="select" :value="item.milestone_id || ''" :options="milestoneOptions" :can-write="canWrite" :disabled="busy || checklistBusy || !milestonesReady" :save="saveField('milestone_id')" @editing="error = ''"><span v-if="currentMilestone">{{ currentMilestone.closed ? t('{name} (closed)', { name: currentMilestone.name }) : currentMilestone.name }}</span><span v-else-if="!item.milestone_id" class="muted">{{ t('No milestone') }}</span></ItemField></section>
           <section><ItemField :label="t('Labels')" kind="labels" :value="JSON.stringify(item.labels)" :label-definitions="labels" :can-write="canWrite" :disabled="busy || checklistBusy || !labelsReady" :save="saveField('labels')" @editing="error = ''"><div v-if="item.labels.length" class="labels"><LabelBadge v-for="tag in item.labels" :key="tag" :name="tag" :definition="labels.find(label => label.name === tag)" /></div><span v-else class="muted">{{ t('None') }}</span></ItemField></section>
           <section><ItemField :label="t('Assignee')" kind="select" :value="item.assignee_id || ''" :options="assigneeOptions" :can-write="canWrite" :disabled="busy || checklistBusy || !assigneesReady" :save="saveField('assignee_id')" @editing="error = ''"><span v-if="item.assignee" class="assignee-value"><UserAvatar :name="item.assignee.name" :src="item.assignee.avatar_url" /><span>{{ item.assignee.name }} <span v-if="item.assignee.is_bot" class="bot-badge">{{ t('Bot') }}</span></span></span><span v-else class="muted">{{ t('Unassigned') }}</span></ItemField></section>
           <NotificationSettings :item-id="itemId" :toggle-target="notificationToggle" />

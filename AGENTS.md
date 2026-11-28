@@ -2,7 +2,7 @@
 
 ## Project Status
 
-The first development increment is implemented: FastAPI/Vue skeleton, PostgreSQL migrations, configurable OIDC/Facebook/local-password login and server-side sessions, administrator-managed password invitations/recovery with an encrypted SMTP outbox, CLI membership provisioning, personal profiles and appearance settings, project permissions, work items with URL filters, comments/activity, local attachments, personal API tokens, and administrator-managed bot accounts. See `README.md` for startup and current limitations and `docs/agent-memory.md` for verified environment findings. The full scope below includes planned capabilities; do not assume they all exist.
+The first development increment is implemented: FastAPI/Vue skeleton, PostgreSQL migrations, configurable OIDC/Facebook/local-password login and server-side sessions, administrator-managed password invitations/recovery with an encrypted SMTP outbox, CLI membership provisioning, personal profiles and appearance settings, project permissions and milestones, work items with URL filters, comments/activity, local attachments, personal API tokens, and administrator-managed bot accounts. See `README.md` for startup and current limitations and `docs/agent-memory.md` for verified environment findings. The full scope below includes planned capabilities; do not assume they all exist.
 
 ## Product Scope
 
@@ -65,7 +65,8 @@ The first development increment is implemented: FastAPI/Vue skeleton, PostgreSQL
 - Enforce project access permissions when serving attachments.
 - Editor uploads are temporary until description/comment save, including during ticket creation. Expire unconfirmed uploads after 24 hours with automatic startup/hourly cleanup; retain the permanent standalone item-upload API behavior for integrations.
 - Parent/child hierarchy and relationships such as blocks and relates-to.
-- Milestones, Kanban, and saved views.
+- Project Owners manage milestones. Ticket writers can assign one open milestone from the same project. Closing a milestone preserves existing ticket assignments and leaves it available in ticket filters.
+- Kanban and saved views.
 - Personal API tokens with names, scopes, expiration, revocation, and last-used metadata. Show the secret only at creation and store only its hash. Tokens must not exceed their owner's permissions.
 - Project webhooks with selectable events, HMAC signatures, event identifiers, background delivery, retries, delivery history, and manual redelivery.
 

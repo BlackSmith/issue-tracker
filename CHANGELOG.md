@@ -4,6 +4,7 @@
 
 ### Added
 
+- Owner-managed project milestones with optional descriptions and target dates, ticket assignment and activity history, and shareable filters for milestones and unassigned tickets. Closed milestones keep existing assignments; migration `0019` preserves existing tickets.
 - Ticket lists show the author, assignee or unassigned state, and localized date and time of the last update. Work item API responses include the author's ID and display name.
 - Owner-managed project logos in General settings, with permission-checked reads, normalized padded PNG storage, migration `0018`, and nonshrinking square sidebar logos or fallback initials.
 - Compact project subscription controls and per-ticket notification bells in work item lists, with live synchronization of inherited preferences across browser tabs.
