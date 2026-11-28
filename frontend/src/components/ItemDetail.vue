@@ -83,6 +83,7 @@ function toggleActivityGroup(id: string) {
 
 let loadSequence = 0
 async function load() {
+  if (!props.itemId) return
   const sequence = ++loadSequence
   try {
     const [i, d, a] = await Promise.all([api<WorkItem>(`/items/${props.itemId}`), api<Discussion[]>(`/items/${props.itemId}/discussion`), api<Attachment[]>(`/items/${props.itemId}/attachments`)])
@@ -267,6 +268,7 @@ async function toggleChecklist(index: number, checked: boolean, entry?: Discussi
 </template>
 
 <style scoped>
+.detail-panel:not(.standalone) { scrollbar-gutter: stable; }
 .activity-group-toggle { margin-bottom: 16px; }
 .attachment-row { display: flex; align-items: center; gap: 8px; }
 .attachment-row a { flex: 1; min-width: 0; }

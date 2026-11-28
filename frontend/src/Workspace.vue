@@ -34,6 +34,7 @@ const projectPath = computed(() => project.value ? `/${project.value.slug}/` : '
 const hasProjectRoute = computed(() => !!route.params.projectSlug || !!route.params.projectId)
 const itemId = computed(() => resolvedPath.value === route.path ? resolvedItem.value?.id || '' : '')
 const ticketRoute = computed(() => !!route.params.itemNumber || !!route.params.itemId)
+const resolvingTicket = computed(() => ticketRoute.value && !itemId.value && loading.value)
 const creatingItem = computed(() => route.name === 'new-item')
 const standalone = computed(() => (ticketRoute.value || creatingItem.value) && route.query.view !== 'panel')
 const q = ref(''), status = ref<string[]>([...defaultStatuses]), label = ref<string[]>([]), sort = ref('updated')
@@ -45,6 +46,10 @@ const sortOptions = computed(() => [
 const filters = computed<Filters>(() => ({ status: status.value, label: label.value, priority: priority.value, type: type.value, assignee: assignee.value }))
 const hasFilters = computed(() => !!q.value || !isDefaultStatusFilter(status.value) || label.value.length > 0 || priority.value.length > 0 || type.value.length > 0 || assignee.value.length > 0)
 const page = computed(() => Number(route.query.page) || 1)
+const listQueryKeys = ['q', 'status', 'label', 'priority', 'type', 'assignee', 'sort', 'direction', 'page']
+const listKey = computed(() => JSON.stringify([projectId.value, ...listQueryKeys.map(key => route.query[key])]))
+const loadedListKey = ref('')
+const listLoading = computed(() => loading.value && listKey.value !== loadedListKey.value)
 let sequence = 0
 useLiveTickets(projectId)
 watch(ticketRevision, () => load(true))
@@ -97,6 +102,7 @@ async function load(background = false) {
     assignee.value = readFilterValues(route.query.assignee)
     direction.value = String(route.query.direction || defaultDirection(sort.value))
     if (projectId.value && !standalone.value) {
+      const key = listKey.value
       const [definitions, people] = await Promise.all([
         api<LabelDefinition[]>(`/projects/${projectId.value}/labels`),
         api<Assignee[]>(`/projects/${projectId.value}/item-assignees`),
@@ -111,12 +117,14 @@ async function load(background = false) {
       const result = await api<{ items: WorkItem[]; total: number }>(`/projects/${projectId.value}/items?${params}`)
       if (current !== sequence) return
       items.value = result.items; total.value = result.total
+      loadedListKey.value = key
     }
   } catch (e) {
     if (current === sequence) {
       error.value = (e as Error).message
       if ((e as { status?: number }).status === 404 || (e as { status?: number }).status === 401) {
         resolvedItem.value = null; resolvedPath.value = ''; items.value = []; total.value = 0
+        loadedListKey.value = ''
       }
     }
   }
@@ -186,7 +194,7 @@ function itemCreated(item: WorkItem) {
 </script>
 
 <template>
-  <div class="workspace" :class="{ 'with-detail-panel': (itemId || (creatingItem && project)) && !standalone }">
+  <div class="workspace" :class="{ 'with-detail-panel': (itemId || resolvingTicket || (creatingItem && project)) && !standalone }">
     <WorkspaceSidebar :projects="projects" :project-id="projectId" :loading="loading" :can-create-project="auth.user?.role === 'administrator'" @create-project="showProject = true" />
     <main class="main-content" :class="{ 'standalone-content': standalone }">
       <PMessage v-if="error" severity="error" closable @close="error = ''">{{ t(error) }}</PMessage>
@@ -226,7 +234,7 @@ function itemCreated(item: WorkItem) {
               </PButton>
             </div>
           </div>
-          <div v-if="loading" class="empty-state">{{ t('Loading work items…') }}</div>
+          <div v-if="listLoading" class="empty-state">{{ t('Loading work items…') }}</div>
           <section v-else-if="items.length" class="item-list" :aria-label="t('Work items')">
             <div v-for="item in items" :key="item.id" class="item-list-entry">
               <RouterLink class="item-row" :to="{ path: item.web_url, query: { ...route.query, view: 'panel' } }">
@@ -248,12 +256,11 @@ function itemCreated(item: WorkItem) {
             </div>
           </section>
           <div v-else class="empty-state"><span class="empty-icon">▤</span><h2>{{ t(hasFilters ? 'No matching work items' : 'No active work items') }}</h2><p>{{ t(hasFilters ? 'Try adjusting your filters or search terms.' : 'Done and canceled work items are hidden by default. Change the status filter to see them, or create a new work item.') }}</p><PButton v-if="project.can_write && !hasFilters" @click="newItem">{{ t('Create work item') }}</PButton></div>
-          <Paginator v-if="total > 25" :first="(page - 1) * 25" :rows="25" :total-records="total" @page="router.push({ query: { ...route.query, page: $event.page + 1 } })" />
+          <Paginator v-if="!listLoading && total > 25" :first="(page - 1) * 25" :rows="25" :total-records="total" @page="router.push({ query: { ...route.query, page: $event.page + 1 } })" />
         </template>
         <div v-else-if="!loading" class="empty-state"><span class="empty-icon">▦</span><h2>{{ t(hasProjectRoute ? 'Project not found' : 'Welcome to your workspace') }}</h2><p>{{ t(hasProjectRoute ? 'This project does not exist or you do not have access to it.' : auth.user?.role === 'administrator' ? 'A project brings your team’s work together. Create one to get started.' : 'Ask an application admin or project owner to grant you access to a project.') }}</p></div>
       </template>
-      <div v-if="ticketRoute && !itemId && loading" class="empty-state">{{ t('Loading work item…') }}</div>
-      <ItemDetail v-if="itemId" :key="itemId" :item-id="itemId" :can-write="project?.can_write || false" :can-manage="project?.can_manage || false" :restrict-ticket-visibility="project?.restrict_ticket_visibility || false" :standalone="standalone" @close="closeItem" @updated="load(true)" />
+      <ItemDetail v-if="itemId || resolvingTicket" :key="itemId || route.path" :item-id="itemId" :can-write="project?.can_write || false" :can-manage="project?.can_manage || false" :restrict-ticket-visibility="project?.restrict_ticket_visibility || false" :standalone="standalone" @close="closeItem" @updated="load(true)" />
       <NewItem v-if="creatingItem && project" :key="project.id" :project="project" :standalone="standalone" @close="closeItem" @toggle-view="setCreationView" @created="itemCreated" />
       <div v-else-if="creatingItem && standalone" class="empty-state"><h2>{{ t(loading ? 'Loading project…' : 'Project not found') }}</h2><p v-if="!loading">{{ t('This project does not exist or you do not have access to it.') }}</p></div>
     </main>

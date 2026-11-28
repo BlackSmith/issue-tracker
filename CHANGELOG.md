@@ -63,6 +63,7 @@
 
 ### Fixed
 
+- Switching tickets keeps the list and its scroll position in place while the detail panel loads without changing width.
 - Closing the project settings dialog returns keyboard focus to its opening button.
 - Opening another password setup link in the same browser document refreshes the setup form and discards the previous token and draft.
 - Password resets, login-email changes, and account disabling revoke browser sessions through account authentication versions while preserving independent API token lifecycles.
